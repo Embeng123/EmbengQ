@@ -28,6 +28,9 @@ import com.google.android.material.textfield.TextInputEditText
 import com.google.android.material.textfield.TextInputLayout
 import usqueandroid.Usqueandroid
 import java.io.File
+import java.io.FileInputStream
+import java.io.FileOutputStream
+import org.json.JSONObject
 import java.util.concurrent.Executors
 
 class MainActivity : Activity() {
@@ -47,7 +50,13 @@ class MainActivity : Activity() {
     private val handler = Handler(Looper.getMainLooper())
     private val executor = Executors.newSingleThreadExecutor()
     private val prefs by lazy { getSharedPreferences("embengq_prefs", MODE_PRIVATE) }
+    // config.json is the bundled/default account copied from assets on first launch.
+    // config_update.json stores a newly registered account. Keep the default as fallback.
     private val configFile by lazy { File(filesDir, "config.json") }
+    private val updatedConfigFile by lazy { File(filesDir, "config_update.json") }
+    private val candidateConfigFile by lazy { File(filesDir, "config_update_candidate.json") }
+    private val activeConfigFile: File
+        get() = if (isConfigValid(updatedConfigFile)) updatedConfigFile else configFile
 
     // State
     private var useEnglish = false
@@ -71,6 +80,11 @@ class MainActivity : Activity() {
     private lateinit var appListContainer: LinearLayout
     private lateinit var appCountText: TextView
     private lateinit var langToggleBtn: MaterialButton
+    private lateinit var accountInfoText: TextView
+    private lateinit var keyValueText: TextView
+    private lateinit var toggleKeyBtn: MaterialButton
+    private var keyVisible = false
+    private var updatingKey = false
 
     // Traffic Stats
     private var lastRxBytes = 0L
@@ -88,22 +102,24 @@ class MainActivity : Activity() {
     private val selectedPackages = linkedSetOf<String>()
 
     // Palette Warna ala v2rayNG 2022
-    private val primaryColor = Color.rgb(25, 118, 210)       // Material Blue #1976D2
-    private val primaryDark = Color.rgb(21, 101, 192)        // #1565C0
-    private val accentFab = Color.rgb(233, 30, 99)           // Pink / Accent #E91E63
-    private val connectedGreen = Color.rgb(46, 125, 50)      // Green #2E7D32
-    private val disconnectedRed = Color.rgb(198, 40, 40)     // Red #C62828
-    private val bgColor = Color.rgb(245, 247, 250)           // Light gray background
-    private val surfaceColor = Color.rgb(255, 255, 255)
-    private val textMain = Color.rgb(33, 33, 33)
-    private val textSub = Color.rgb(117, 117, 117)
-    private val outlineColor = Color.rgb(224, 224, 224)
+    private val primaryColor = Color.rgb(13, 17, 23)       // GitHub Dark background
+    private val primaryDark = Color.rgb(240, 246, 252)     // GitHub Dark foreground
+    private val accentFab = Color.rgb(240, 246, 252)
+    private val connectedGreen = Color.rgb(63, 185, 80)
+    private val disconnectedRed = Color.rgb(248, 81, 73)
+    private val bgColor = Color.rgb(13, 17, 23)
+    private val surfaceColor = Color.rgb(22, 27, 34)
+    private val textMain = Color.rgb(240, 246, 252)
+    private val textSub = Color.rgb(139, 148, 158)
+    private val outlineColor = Color.rgb(48, 54, 61)
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         useEnglish = prefs.getBoolean("useEnglish", false)
+        installBundledDefaultConfigIfNeeded()
         buildUi()
         loadSavedState()
+        refreshAccountInfo()
         refreshState()
         resetSpeedMeter()
         handler.post(speedTicker)
@@ -143,6 +159,7 @@ class MainActivity : Activity() {
         prefs.edit().putBoolean("useEnglish", useEnglish).apply()
         buildUi()
         loadSavedState()
+        refreshAccountInfo()
         if (currentPageIndex == 1) ensureAppsLoaded()
         refreshState()
     }
@@ -265,7 +282,7 @@ class MainActivity : Activity() {
         fabConnect = FloatingActionButton(this).apply {
             backgroundTintList = ColorStateList.valueOf(accentFab)
             setImageResource(android.R.drawable.ic_lock_power_off)
-            setColorFilter(Color.WHITE)
+            setColorFilter(primaryColor)
             elevation = dp(6).toFloat()
             setOnClickListener {
                 if (vpnRunning) disconnectVpn() else connectVpn()
@@ -286,20 +303,61 @@ class MainActivity : Activity() {
         orientation = LinearLayout.VERTICAL
         setPadding(dp(16), dp(16), dp(16), dp(80))
 
+        // Account / key management card
+        val accountCard = cardContainer()
+        val accountBox = LinearLayout(this@MainActivity).apply {
+            orientation = LinearLayout.VERTICAL
+            setPadding(dp(16), dp(14), dp(16), dp(16))
+        }
+        val accountTitle = TextView(this@MainActivity).apply {
+            text = tr("Akun WARP", "WARP Account")
+            textSize = 16f
+            setTypeface(null, Typeface.BOLD)
+            setTextColor(primaryDark)
+        }
+        accountInfoText = TextView(this@MainActivity).apply {
+            textSize = 12f
+            setTextColor(textSub)
+            setPadding(0, dp(6), 0, dp(8))
+        }
+        keyValueText = TextView(this@MainActivity).apply {
+            textSize = 12f
+            setTextColor(textMain)
+            setPadding(dp(10), dp(10), dp(10), dp(10))
+            background = round(surfaceColor, dp(8), outlineColor)
+            textIsSelectable = true
+        }
+        val accountButtons = LinearLayout(this@MainActivity).apply { orientation = LinearLayout.HORIZONTAL }
+        toggleKeyBtn = MaterialButton(this@MainActivity).apply {
+            text = tr("Tampilkan Key", "Show Key")
+            isAllCaps = false
+            textSize = 12f
+            setOnClickListener {
+                keyVisible = !keyVisible
+                refreshAccountInfo()
+            }
+        }
+        val updateKeyBtn = MaterialButton(this@MainActivity).apply {
+            text = tr("Update Key", "Update Key")
+            isAllCaps = false
+            textSize = 12f
+            setOnClickListener { updateKey() }
+        }
+        accountButtons.addView(toggleKeyBtn, LinearLayout.LayoutParams(0, dp(42), 1f).apply { rightMargin = dp(8) })
+        accountButtons.addView(updateKeyBtn, LinearLayout.LayoutParams(0, dp(42), 1f))
+        accountBox.addView(accountTitle)
+        accountBox.addView(accountInfoText)
+        accountBox.addView(keyValueText)
+        accountBox.addView(accountButtons)
+        accountCard.addView(accountBox)
+        addView(accountCard)
+        addView(space(12))
+
         val card = cardContainer()
         val cardBox = LinearLayout(this@MainActivity).apply {
             orientation = LinearLayout.VERTICAL
             setPadding(dp(16), dp(14), dp(16), dp(16))
         }
-
-        val cardTitle = TextView(this@MainActivity).apply {
-            text = tr("Konfigurasi MASQUE", "MASQUE Configuration")
-            textSize = 16f
-            setTypeface(null, Typeface.BOLD)
-            setTextColor(primaryDark)
-            setPadding(0, 0, 0, dp(12))
-        }
-        cardBox.addView(cardTitle)
 
         // Dropdown Pilihan SNI
         cardBox.addView(label(tr("Pilihan SNI", "SNI Option")))
@@ -349,14 +407,13 @@ class MainActivity : Activity() {
         }
         cardBox.addView(inputWrap(tr("Endpoint IP", "Endpoint IP"), endpointInput))
 
-        // Port (LOCKED: 443)
+        // Protocol information; the actual endpoint port remains locked to 443.
         cardBox.addView(space(6))
-        cardBox.addView(label(tr("Port (Terkunci)", "Port (Locked)")))
         val portLockedView = TextView(this@MainActivity).apply {
-            text = "$LOCKED_PORT (Standard HTTPS/MASQUE)"
+            text = "HTTP/3 over UDP/QUIC"
             textSize = 14f
             setTextColor(textSub)
-            background = round(Color.rgb(238, 238, 238), dp(8), outlineColor)
+            background = round(surfaceColor, dp(8), outlineColor)
             setPadding(dp(14), dp(12), dp(14), dp(12))
         }
         cardBox.addView(portLockedView, LinearLayout.LayoutParams(-1, -2))
@@ -368,9 +425,9 @@ class MainActivity : Activity() {
             isAllCaps = false
             cornerRadius = dp(8)
             setTextColor(primaryColor)
-            backgroundTintList = ColorStateList.valueOf(Color.rgb(232, 240, 254))
+            backgroundTintList = ColorStateList.valueOf(Color.rgb(33, 38, 45))
             setOnClickListener {
-                val def = Usqueandroid.getDefaultEndpoint(configFile.absolutePath)
+                val def = Usqueandroid.getDefaultEndpoint(activeConfigFile.absolutePath)
                 endpointInput.setText(parseEndpointHost(def))
                 toast(tr("Endpoint bawaan dimuat", "Default endpoint loaded"))
             }
@@ -456,7 +513,7 @@ class MainActivity : Activity() {
             isAllCaps = false
             cornerRadius = dp(8)
             setTextColor(primaryColor)
-            backgroundTintList = ColorStateList.valueOf(Color.rgb(232, 240, 254))
+            backgroundTintList = ColorStateList.valueOf(Color.rgb(33, 38, 45))
             setOnClickListener { selectAllVisibleApps() }
         }
         val clearAllBtn = MaterialButton(this@MainActivity).apply {
@@ -465,7 +522,7 @@ class MainActivity : Activity() {
             isAllCaps = false
             cornerRadius = dp(8)
             setTextColor(textSub)
-            backgroundTintList = ColorStateList.valueOf(Color.rgb(240, 240, 240))
+            backgroundTintList = ColorStateList.valueOf(Color.rgb(33, 38, 45))
             setOnClickListener { clearAllVisibleApps() }
         }
         btnRow.addView(selectAllBtn, LinearLayout.LayoutParams(0, dp(38), 1f).apply { rightMargin = dp(8) })
@@ -659,7 +716,7 @@ class MainActivity : Activity() {
         text = "${app.label}\n${app.packageName}"
         setTextColor(textMain)
         textSize = 13f
-        background = round(if (selectedPackages.contains(app.packageName)) Color.rgb(232, 240, 254) else surfaceColor, dp(8), outlineColor)
+        background = round(if (selectedPackages.contains(app.packageName)) Color.rgb(33, 38, 45) else surfaceColor, dp(8), outlineColor)
         setPadding(dp(10), dp(6), dp(10), dp(6))
         isChecked = selectedPackages.contains(app.packageName)
         setOnCheckedChangeListener { _, checked ->
@@ -669,13 +726,103 @@ class MainActivity : Activity() {
         }
     }
 
-    private fun hasValidRegistration(): Boolean = configFile.exists() && runCatching { Usqueandroid.isRegistered(configFile.absolutePath) }.getOrDefault(false)
+    private fun installBundledDefaultConfigIfNeeded() {
+        if (configFile.exists()) return
+        runCatching {
+            assets.open("config_default.json").use { input ->
+                FileOutputStream(configFile).use { output -> input.copyTo(output) }
+            }
+        }.onFailure {
+            // Do not silently register a new account on first launch. User can still use Update Key.
+            android.util.Log.w("EmbengQ", "Bundled assets/config_default.json is missing or invalid", it)
+        }
+    }
 
-    private fun deleteInvalidConfigIfNeeded() {
-        if (!configFile.exists()) return
-        val txt = runCatching { configFile.readText() }.getOrDefault("")
-        if (txt.contains("\"private_key\": \"\"") || txt.contains("\"access_token\": \"\"") || !hasValidRegistration()) {
-            runCatching { configFile.delete() }
+    private fun isConfigValid(file: File): Boolean {
+        return file.exists() && file.length() > 0L &&
+            runCatching { Usqueandroid.isRegistered(file.absolutePath) }.getOrDefault(false)
+    }
+
+    private fun hasValidRegistration(): Boolean = isConfigValid(activeConfigFile)
+
+    private fun refreshAccountInfo() {
+        if (!::accountInfoText.isInitialized || !::keyValueText.isInitialized) return
+        val file = activeConfigFile
+        if (!isConfigValid(file)) {
+            accountInfoText.text = tr(
+                "Konfigurasi akun belum tersedia. Tambahkan assets/config_default.json atau tekan Update Key.",
+                "No account config found. Add assets/config_default.json or tap Update Key."
+            )
+            keyValueText.text = tr("Key belum tersedia", "Key unavailable")
+            toggleKeyBtn.text = tr("Tampilkan Key", "Show Key")
+            return
+        }
+        val json = runCatching { JSONObject(file.readText()) }.getOrNull()
+        val privateKey = json?.optString("private_key", "").orEmpty()
+        val token = json?.optString("access_token", "").orEmpty()
+        val id = json?.optString("id", "").orEmpty()
+        val ipv4 = json?.optString("ipv4", "").orEmpty()
+        val usingUpdate = file == updatedConfigFile
+        accountInfoText.text = buildString {
+            append(if (usingUpdate) tr("Akun aktif: hasil update", "Active account: updated") else tr("Akun aktif: bawaan", "Active account: default"))
+            if (id.isNotBlank()) append("\nID: $id")
+            if (ipv4.isNotBlank()) append("\nIPv4: $ipv4")
+        }
+        keyValueText.text = if (keyVisible) {
+            "Private key:\n${privateKey.ifBlank { "(tidak tersedia)" }}\n\nAccess token:\n${token.ifBlank { "(tidak tersedia)" }}"
+        } else {
+            "Private key: ${if (privateKey.isBlank()) "(tidak tersedia)" else "••••••••••••"}\nAccess token: ${if (token.isBlank()) "(tidak tersedia)" else "••••••••••••"}"
+        }
+        toggleKeyBtn.text = if (keyVisible) tr("Sembunyikan Key", "Hide Key") else tr("Tampilkan Key", "Show Key")
+    }
+
+    private fun updateKey() {
+        if (updatingKey) return
+        if (vpnRunning) {
+            toast(tr("Putuskan VPN sebelum update key", "Disconnect VPN before updating the key"))
+            return
+        }
+        updatingKey = true
+        log(tr("Mendaftarkan akun WARP baru…", "Registering a new WARP account…"))
+        executor.execute {
+            var error: String? = null
+            try {
+                runCatching { candidateConfigFile.delete() }
+                val result = Usqueandroid.register(candidateConfigFile.absolutePath, "Android")
+                val valid = result.isNullOrBlank() && isConfigValid(candidateConfigFile)
+                if (!valid) {
+                    error = result?.takeIf { it.isNotBlank() }
+                        ?: tr("Registrasi gagal atau konfigurasi baru tidak valid", "Registration failed or new config is invalid")
+                    candidateConfigFile.delete()
+                } else {
+                    if (updatedConfigFile.exists()) updatedConfigFile.delete()
+                    if (!candidateConfigFile.renameTo(updatedConfigFile)) {
+                        // rename can fail across filesystems; both files are in filesDir, but retain a safe fallback.
+                        FileInputStream(candidateConfigFile).use { input ->
+                            FileOutputStream(updatedConfigFile).use { output -> input.copyTo(output) }
+                        }
+                        candidateConfigFile.delete()
+                    }
+                    if (!isConfigValid(updatedConfigFile)) {
+                        updatedConfigFile.delete()
+                        error = tr("Konfigurasi baru gagal diverifikasi", "New config failed validation")
+                    }
+                }
+            } catch (e: Exception) {
+                error = e.message ?: e.javaClass.simpleName
+                runCatching { candidateConfigFile.delete() }
+            }
+            handler.post {
+                updatingKey = false
+                refreshAccountInfo()
+                if (error == null && isConfigValid(updatedConfigFile)) {
+                    log(tr("Update key berhasil. Akun baru siap digunakan.", "Key updated. New account is ready."))
+                    toast(tr("Update key berhasil", "Key update successful"))
+                } else {
+                    log(tr("Update key gagal: ", "Key update failed: ") + error.orEmpty())
+                    toast(tr("Update gagal; akun sebelumnya tetap digunakan", "Update failed; previous account remains active"))
+                }
+            }
         }
     }
 
@@ -737,27 +884,9 @@ class MainActivity : Activity() {
             return
         }
         if (!hasValidRegistration()) {
-            log(tr("Mendaftarkan MASQUE otomatis…", "Registering MASQUE automatically…"))
-            executor.execute {
-                try {
-                    deleteInvalidConfigIfNeeded()
-                    val result = Usqueandroid.register(configFile.absolutePath, "Android")
-                    handler.post {
-                        if (result.isNullOrBlank() && hasValidRegistration()) {
-                            log(tr("Pendaftaran berhasil, meminta izin VPN…", "Registered. Requesting VPN permission…"))
-                            requestVpnAndStart()
-                        } else {
-                            log(tr("Gagal mendaftar: ", "Registration failed: ") + (result ?: tr("Kesalahan tidak diketahui", "Unknown error")))
-                            refreshState(tr("Gagal daftar", "Registration error"))
-                        }
-                    }
-                } catch (e: Exception) {
-                    handler.post {
-                        log("Error: ${e.message ?: e.javaClass.simpleName}")
-                        refreshState(tr("Registrasi error", "Registration error"))
-                    }
-                }
-            }
+            refreshAccountInfo()
+            log(tr("Konfigurasi akun bawaan tidak ditemukan atau tidak valid. Tambahkan assets/config_default.json atau tekan Update Key.", "Default account config is missing or invalid. Add assets/config_default.json or tap Update Key."))
+            toast(tr("Konfigurasi akun belum tersedia", "Account configuration unavailable"))
             return
         }
         requestVpnAndStart()
@@ -779,13 +908,13 @@ class MainActivity : Activity() {
         val splitMode = splitModeSwitch.isChecked
         val allowedApps = if (splitMode) ArrayList(selectedPackages) else arrayListOf<String>()
 
-        log(tr("Memulai terowongan MASQUE ke $endpoint (SNI: $sni)", "Starting MASQUE tunnel to $endpoint (SNI: $sni)"))
+        log("")
         resetSpeedMeter()
         vpnRunning = true
         refreshState(tr("Menghubungkan…", "Connecting…"))
 
         val intent = Intent(this, UsqueVpnService::class.java)
-            .putExtra("configPath", configFile.absolutePath)
+            .putExtra("configPath", activeConfigFile.absolutePath)
             .putExtra("sni", sni)
             .putExtra("endpoint", endpoint)
             .putExtra("splitMode", splitMode)
