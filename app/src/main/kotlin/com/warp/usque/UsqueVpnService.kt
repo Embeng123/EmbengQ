@@ -22,9 +22,9 @@ import java.util.concurrent.atomic.AtomicBoolean
 class UsqueVpnService : VpnService() {
     companion object {
         const val ACTION_STOP = "com.warp.usque.STOP_VPN"
-        private const val TAG = "UsqueVpnService"
+        private const val TAG = "EmbengQVpnService"
         private const val NOTIFICATION_ID = 1001
-        private const val CHANNEL_ID = "usque_vpn"
+        private const val CHANNEL_ID = "embengq_vpn"
         @Volatile private var activeService: UsqueVpnService? = null
 
         fun stopActiveTunnel() {
@@ -58,8 +58,8 @@ class UsqueVpnService : VpnService() {
         manualStop.set(false)
 
         val configPath = intent?.getStringExtra("configPath") ?: File(filesDir, "config.json").absolutePath
-        val sni = intent?.getStringExtra("sni") ?: "www.visa.cn"
-        val endpoint = intent?.getStringExtra("endpoint") ?: "162.159.198.2:500"
+        val sni = intent?.getStringExtra("sni") ?: "engage.cloudflareclient.com"
+        val endpoint = intent?.getStringExtra("endpoint") ?: "162.159.198.2:443"
         val splitMode = intent?.getBooleanExtra("splitMode", false) ?: false
         val allowedApps = intent?.getStringArrayListExtra("allowedApps") ?: arrayListOf()
 
@@ -84,7 +84,7 @@ class UsqueVpnService : VpnService() {
             Log.i(TAG, "native endpoint now=${runCatching { Usqueandroid.getEndpoint() }.getOrDefault("")}")
 
             val builder = Builder()
-                .setSession("Usque VPN")
+                .setSession("EmbengQ VPN")
                 .setMtu(1280)
                 .addAddress(safeIPv4(configPath), 32)
                 .addDnsServer("1.1.1.1")
@@ -121,8 +121,6 @@ class UsqueVpnService : VpnService() {
             tun = null
             Log.i(TAG, "tun established fd=$detachedTunFd")
 
-            // Native fd mode: Go owns the Android TUN fd and handles the full data plane.
-            // Do NOT pass connect-port here. The second argument is tunFd.
             val err = Usqueandroid.startTunnelWithFd(configPath, detachedTunFd.toLong(), object : VpnStateCallback {
                 override fun onConnected() {
                     restarting.set(false)
@@ -168,7 +166,6 @@ class UsqueVpnService : VpnService() {
                 restarting.set(false)
                 return@execute
             }
-            // Allow a failed retry to schedule another retry instead of getting stuck after one attempt.
             restarting.set(false)
             startForegroundCompat()
             startNativeTunnel(lastConfigPath, lastSni, lastEndpoint, lastSplitMode, ArrayList(lastAllowedApps))
@@ -178,7 +175,7 @@ class UsqueVpnService : VpnService() {
     private fun startForegroundCompat() {
         runCatching {
             if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
-                val channel = NotificationChannel(CHANNEL_ID, "Usque VPN", NotificationManager.IMPORTANCE_LOW)
+                val channel = NotificationChannel(CHANNEL_ID, "EmbengQ VPN", NotificationManager.IMPORTANCE_LOW)
                 getSystemService(NotificationManager::class.java).createNotificationChannel(channel)
             }
             val pendingIntent = PendingIntent.getActivity(
@@ -193,8 +190,8 @@ class UsqueVpnService : VpnService() {
                 @Suppress("DEPRECATION")
                 Notification.Builder(this)
             }
-                .setContentTitle("Usque VPN")
-                .setContentText("VPN is running")
+                .setContentTitle("EmbengQ VPN")
+                .setContentText("EmbengQ is running")
                 .setSmallIcon(android.R.drawable.stat_sys_warning)
                 .setContentIntent(pendingIntent)
                 .setOngoing(true)
