@@ -18,7 +18,6 @@ import android.view.Gravity
 import android.view.View
 import android.view.ViewGroup
 import android.widget.*
-import com.google.android.material.appbar.MaterialToolbar
 import com.google.android.material.button.MaterialButton
 import com.google.android.material.card.MaterialCardView
 import com.google.android.material.checkbox.MaterialCheckBox
@@ -27,8 +26,6 @@ import com.google.android.material.floatingactionbutton.FloatingActionButton
 import com.google.android.material.materialswitch.MaterialSwitch
 import com.google.android.material.textfield.TextInputEditText
 import com.google.android.material.textfield.TextInputLayout
-import org.json.JSONArray
-import org.json.JSONObject
 import usqueandroid.Usqueandroid
 import java.io.File
 import java.util.concurrent.Executors
@@ -82,7 +79,7 @@ class MainActivity : Activity() {
     private val speedTicker = object : Runnable {
         override fun run() {
             updateSpeedLine()
-            handler.postDelayed(this, 1000)
+            handler.postDelayed(this, 1000L)
         }
     }
 
@@ -119,6 +116,28 @@ class MainActivity : Activity() {
 
     private fun tr(id: String, en: String): String = if (useEnglish) en else id
 
+    private fun dp(v: Int): Int = (v * resources.displayMetrics.density).toInt()
+
+    private fun log(msg: String) {
+        if (::logText.isInitialized) logText.text = msg
+    }
+
+    private fun toast(msg: String) {
+        Toast.makeText(this, msg, Toast.LENGTH_SHORT).show()
+    }
+
+    private fun parseEndpointHost(value: String): String {
+        val v = value.trim()
+        if (v.isBlank()) return "162.159.198.2"
+        if (v.startsWith("[") && v.contains("]")) return v.substringAfter("[").substringBefore("]")
+        return if (v.count { it == ':' } == 1) v.substringBefore(':') else v
+    }
+
+    private fun normalizedEndpointHost(): String {
+        val text = if (::endpointInput.isInitialized) endpointInput.text?.toString().orEmpty() else ""
+        return parseEndpointHost(text.trim().ifBlank { "162.159.198.2" })
+    }
+
     private fun toggleLanguage() {
         useEnglish = !useEnglish
         prefs.edit().putBoolean("useEnglish", useEnglish).apply()
@@ -138,30 +157,37 @@ class MainActivity : Activity() {
             layoutParams = FrameLayout.LayoutParams(-1, -1)
         }
 
-        // Toolbar ala v2rayNG
-        val toolbar = MaterialToolbar(this).apply {
-            title = "EmbengQ"
-            setTitleTextColor(Color.WHITE)
+        // Header Top Bar ala v2rayNG
+        val topBar = LinearLayout(this).apply {
+            orientation = LinearLayout.HORIZONTAL
+            gravity = Gravity.CENTER_VERTICAL
             setBackgroundColor(primaryColor)
             elevation = dp(4).toFloat()
-
-            langToggleBtn = MaterialButton(context).apply {
-                text = if (useEnglish) "EN" else "ID"
-                textSize = 12f
-                setTextColor(primaryColor)
-                backgroundTintList = ColorStateList.valueOf(Color.WHITE)
-                cornerRadius = dp(14)
-                minHeight = dp(32)
-                minimumWidth = dp(48)
-                setPadding(dp(8), 0, dp(8), 0)
-                setOnClickListener { toggleLanguage() }
-            }
-            val params = MaterialToolbar.LayoutParams(Gravity.END or Gravity.CENTER_VERTICAL).apply {
-                rightMargin = dp(16)
-            }
-            addView(langToggleBtn, params)
+            setPadding(dp(16), 0, dp(16), 0)
         }
-        mainLayout.addView(toolbar, LinearLayout.LayoutParams(-1, dp(56)))
+
+        val appTitle = TextView(this).apply {
+            text = "EmbengQ"
+            textSize = 20f
+            setTypeface(null, Typeface.BOLD)
+            setTextColor(Color.WHITE)
+        }
+
+        langToggleBtn = MaterialButton(this).apply {
+            text = if (useEnglish) "EN" else "ID"
+            textSize = 12f
+            setTextColor(primaryColor)
+            backgroundTintList = ColorStateList.valueOf(Color.WHITE)
+            cornerRadius = dp(14)
+            minHeight = dp(32)
+            minimumWidth = dp(48)
+            setPadding(dp(8), 0, dp(8), 0)
+            setOnClickListener { toggleLanguage() }
+        }
+
+        topBar.addView(appTitle, LinearLayout.LayoutParams(0, -2, 1f))
+        topBar.addView(langToggleBtn, LinearLayout.LayoutParams(-2, dp(34)))
+        mainLayout.addView(topBar, LinearLayout.LayoutParams(-1, dp(56)))
 
         // Tab Switcher (Koneksi / Per-Aplikasi)
         val tabContainer = LinearLayout(this).apply {
@@ -235,12 +261,12 @@ class MainActivity : Activity() {
 
         root.addView(mainLayout)
 
-        // Floating Action Button (FAB) Connect/Disconnect ala v2rayNG
+        // Floating Action Button (FAB) Connect/Disconnect
         fabConnect = FloatingActionButton(this).apply {
             backgroundTintList = ColorStateList.valueOf(accentFab)
             setImageResource(android.R.drawable.ic_lock_power_off)
             setColorFilter(Color.WHITE)
-            compatElevation = dp(6).toFloat()
+            elevation = dp(6).toFloat()
             setOnClickListener {
                 if (vpnRunning) disconnectVpn() else connectVpn()
             }
@@ -248,7 +274,7 @@ class MainActivity : Activity() {
         val fabParams = FrameLayout.LayoutParams(-2, -2).apply {
             gravity = Gravity.BOTTOM or Gravity.END
             rightMargin = dp(20)
-            bottomMargin = dp(64) // Di atas bottom status bar
+            bottomMargin = dp(64)
         }
         root.addView(fabConnect, fabParams)
 
@@ -260,7 +286,6 @@ class MainActivity : Activity() {
         orientation = LinearLayout.VERTICAL
         setPadding(dp(16), dp(16), dp(16), dp(80))
 
-        // Card Parameter Utama
         val card = cardContainer()
         val cardBox = LinearLayout(this@MainActivity).apply {
             orientation = LinearLayout.VERTICAL
@@ -290,7 +315,9 @@ class MainActivity : Activity() {
             adapter = ArrayAdapter(this@MainActivity, android.R.layout.simple_spinner_dropdown_item, sniOptions)
             onItemSelectedListener = object : AdapterView.OnItemSelectedListener {
                 override fun onItemSelected(p0: AdapterView<*>?, p1: View?, pos: Int, id: Long) {
-                    customSniWrap.visibility = if (pos == 3) View.VISIBLE else View.GONE
+                    if (::customSniWrap.isInitialized) {
+                        customSniWrap.visibility = if (pos == 3) View.VISIBLE else View.GONE
+                    }
                     markDirty()
                 }
                 override fun onNothingSelected(p0: AdapterView<*>?) {}
@@ -298,7 +325,7 @@ class MainActivity : Activity() {
         }
         cardBox.addView(sniSpinner, LinearLayout.LayoutParams(-1, dp(48)))
 
-        // Custom SNI Field (opsional jika pilih Kustom)
+        // Custom SNI Field
         customSniInput = TextInputEditText(this@MainActivity).apply {
             hint = "e.g. your-sni.com"
             setTextColor(textMain)
@@ -456,7 +483,6 @@ class MainActivity : Activity() {
         addView(card)
     }
 
-    // Helper UI & Widgets
     private fun tabBtn(label: String) = MaterialButton(this).apply {
         text = label
         isAllCaps = false
@@ -509,7 +535,6 @@ class MainActivity : Activity() {
     }
 
     private fun space(h: Int) = View(this).apply { layoutParams = LinearLayout.LayoutParams(1, dp(h)) }
-    private fun dp(v: Int) = (v * resources.displayMetrics.density).toInt()
 
     private fun dirtyWatcher() = object : TextWatcher {
         override fun beforeTextChanged(s: CharSequence?, start: Int, count: Int, after: Int) {}
@@ -521,7 +546,6 @@ class MainActivity : Activity() {
         configDirty = true
     }
 
-    // Resolusi Nilai SNI Terpilih
     private fun currentSelectedSni(): String {
         return when (sniSpinner.selectedItemPosition) {
             0 -> PRESET_SNIS[0]
@@ -565,7 +589,6 @@ class MainActivity : Activity() {
         configDirty = false
     }
 
-    // Kelola Aplikasi
     private fun ensureAppsLoaded() {
         if (appsLoaded) return
         appsLoaded = true
@@ -646,7 +669,6 @@ class MainActivity : Activity() {
         }
     }
 
-    // Registrasi & Cek Masque
     private fun hasValidRegistration(): Boolean = configFile.exists() && runCatching { Usqueandroid.isRegistered(configFile.absolutePath) }.getOrDefault(false)
 
     private fun deleteInvalidConfigIfNeeded() {
@@ -657,7 +679,6 @@ class MainActivity : Activity() {
         }
     }
 
-    // Speed Meter
     private fun resetSpeedMeter() {
         lastRxBytes = TrafficStats.getTotalRxBytes().takeIf { it >= 0 } ?: 0L
         lastTxBytes = TrafficStats.getTotalTxBytes().takeIf { it >= 0 } ?: 0L
@@ -782,8 +803,21 @@ class MainActivity : Activity() {
 
         UsqueVpnService.stopActiveTunnel()
         runCatching { startService(Intent(this, UsqueVpnService::class.java).setAction(UsqueVpnService.ACTION_STOP)) }
-        handler.postDelayed({
+        handler.postDelayed(Runnable {
             runCatching { stopService(Intent(this, UsqueVpnService::class.java)) }
             vpnRunning = false
             refreshState(tr("Terputus", "Disconnected"))
-            log(tr("VPN
+            log(tr("VPN telah dinonaktifkan.", "VPN stopped."))
+        }, 500L)
+    }
+
+    override fun onActivityResult(requestCode: Int, resultCode: Int, data: Intent?) {
+        super.onActivityResult(requestCode, resultCode, data)
+        if (requestCode == REQ_VPN && resultCode == RESULT_OK) {
+            vpnGranted = true
+            if (hasValidRegistration()) startTunnelNow() else connectVpn()
+        } else if (requestCode == REQ_VPN) {
+            toast(tr("Izin VPN ditolak", "VPN permission denied"))
+        }
+    }
+}
