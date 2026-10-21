@@ -22,7 +22,6 @@ import com.google.android.material.button.MaterialButton
 import com.google.android.material.card.MaterialCardView
 import com.google.android.material.checkbox.MaterialCheckBox
 import com.google.android.material.divider.MaterialDivider
-import com.google.android.material.floatingactionbutton.FloatingActionButton
 import com.google.android.material.materialswitch.MaterialSwitch
 import com.google.android.material.textfield.TextInputEditText
 import com.google.android.material.textfield.TextInputLayout
@@ -75,7 +74,7 @@ class MainActivity : Activity() {
     private lateinit var speedText: TextView
     private lateinit var logText: TextView
     private lateinit var splitModeSwitch: MaterialSwitch
-    private lateinit var fabConnect: FloatingActionButton
+    private lateinit var connectButton: MaterialButton
     private lateinit var appSearchInput: TextInputEditText
     private lateinit var appListContainer: LinearLayout
     private lateinit var appCountText: TextView
@@ -165,100 +164,53 @@ class MainActivity : Activity() {
     }
 
     private fun buildUi() {
-        val root = FrameLayout(this).apply {
-            setBackgroundColor(bgColor)
-        }
-
+        val root = FrameLayout(this).apply { setBackgroundColor(bgColor) }
         val mainLayout = LinearLayout(this).apply {
             orientation = LinearLayout.VERTICAL
             layoutParams = FrameLayout.LayoutParams(-1, -1)
         }
 
-        // Header Top Bar ala v2rayNG
+        // Header: brand first, language switch deliberately understated.
         val topBar = LinearLayout(this).apply {
             orientation = LinearLayout.HORIZONTAL
             gravity = Gravity.CENTER_VERTICAL
             setBackgroundColor(primaryColor)
-            elevation = dp(4).toFloat()
-            setPadding(dp(16), 0, dp(16), 0)
+            setPadding(dp(18), dp(4), dp(16), dp(4))
         }
-
         val appTitle = TextView(this).apply {
             text = "EmbengQ"
-            textSize = 20f
+            textSize = 24f
             setTypeface(null, Typeface.BOLD)
-            setTextColor(Color.WHITE)
+            setTextColor(textMain)
+            letterSpacing = 0.01f
         }
-
         langToggleBtn = MaterialButton(this).apply {
             text = if (useEnglish) "EN" else "ID"
-            textSize = 12f
-            setTextColor(primaryColor)
-            backgroundTintList = ColorStateList.valueOf(Color.WHITE)
-            cornerRadius = dp(14)
-            minHeight = dp(32)
-            minimumWidth = dp(48)
-            setPadding(dp(8), 0, dp(8), 0)
+            textSize = 10f
+            isAllCaps = false
+            setTextColor(textSub)
+            backgroundTintList = ColorStateList.valueOf(surfaceColor)
+            cornerRadius = dp(10)
+            minHeight = dp(30)
+            minimumHeight = dp(30)
+            minimumWidth = dp(42)
+            setPadding(dp(4), 0, dp(4), 0)
+            insetTop = 0
+            insetBottom = 0
             setOnClickListener { toggleLanguage() }
         }
-
         topBar.addView(appTitle, LinearLayout.LayoutParams(0, -2, 1f))
-        topBar.addView(langToggleBtn, LinearLayout.LayoutParams(-2, dp(34)))
-        mainLayout.addView(topBar, LinearLayout.LayoutParams(-1, dp(56)))
+        topBar.addView(langToggleBtn, LinearLayout.LayoutParams(-2, dp(30)))
+        mainLayout.addView(topBar, LinearLayout.LayoutParams(-1, dp(60)))
 
-        // Tab Switcher (Koneksi / Per-Aplikasi)
-        val tabContainer = LinearLayout(this).apply {
-            orientation = LinearLayout.HORIZONTAL
-            setBackgroundColor(primaryColor)
-            setPadding(dp(16), 0, dp(16), dp(8))
-        }
-        val tabConfig = tabBtn(tr("Koneksi", "Connection"))
-        val tabApps = tabBtn(tr("Per-Aplikasi", "Apps"))
-        tabContainer.addView(tabConfig, LinearLayout.LayoutParams(0, dp(38), 1f).apply { rightMargin = dp(8) })
-        tabContainer.addView(tabApps, LinearLayout.LayoutParams(0, dp(38), 1f))
-        mainLayout.addView(tabContainer)
-
-        val pageHost = FrameLayout(this).apply {
-            layoutParams = LinearLayout.LayoutParams(-1, 0, 1f)
-            setBackgroundColor(bgColor)
-        }
-
-        val configView = buildConfigLayout()
-        val appsView = buildAppsLayout()
-
-        fun showPage(index: Int) {
-            currentPageIndex = index
-            pageHost.removeAllViews()
-            setTabSelected(tabConfig, index == 0)
-            setTabSelected(tabApps, index == 1)
-
-            val target = if (index == 0) configView else {
-                ensureAppsLoaded()
-                appsView
-            }
-            (target.parent as? ViewGroup)?.removeView(target)
-            pageHost.addView(ScrollView(this).apply {
-                isFillViewport = true
-                addView(target)
-            })
-        }
-
-        tabConfig.setOnClickListener { showPage(0) }
-        tabApps.setOnClickListener { showPage(1) }
-        mainLayout.addView(pageHost)
-
-        // Status & Speed Bottom Bar (Khas v2rayNG)
-        val bottomBar = LinearLayout(this).apply {
+        // Connection status is near the brand, not buried at the bottom.
+        val statusBar = LinearLayout(this).apply {
             orientation = LinearLayout.HORIZONTAL
             gravity = Gravity.CENTER_VERTICAL
-            setBackgroundColor(surfaceColor)
-            elevation = dp(8).toFloat()
-            setPadding(dp(16), dp(10), dp(16), dp(10))
+            setPadding(dp(20), dp(7), dp(20), dp(8))
+            setBackgroundColor(primaryColor)
         }
-
-        val statusBox = LinearLayout(this).apply {
-            orientation = LinearLayout.VERTICAL
-        }
+        val statusBox = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL }
         statusText = TextView(this).apply {
             text = tr("Status: Terputus", "Status: Disconnected")
             textSize = 14f
@@ -273,28 +225,68 @@ class MainActivity : Activity() {
         }
         statusBox.addView(statusText)
         statusBox.addView(speedText)
-        bottomBar.addView(statusBox, LinearLayout.LayoutParams(0, -2, 1f))
-        mainLayout.addView(bottomBar, LinearLayout.LayoutParams(-1, -2))
+        statusBar.addView(statusBox, LinearLayout.LayoutParams(0, -2, 1f))
+        mainLayout.addView(statusBar, LinearLayout.LayoutParams(-1, -2))
 
+        // Large, labeled connection control with a comfortable touch target.
+        connectButton = MaterialButton(this).apply {
+            text = tr("HUBUNGKAN VPN", "CONNECT VPN")
+            textSize = 14f
+            isAllCaps = false
+            setTypeface(null, Typeface.BOLD)
+            cornerRadius = dp(12)
+            minHeight = dp(56)
+            minimumHeight = dp(56)
+            setTextColor(primaryColor)
+            backgroundTintList = ColorStateList.valueOf(textMain)
+            insetTop = 0
+            insetBottom = 0
+            elevation = dp(2).toFloat()
+            contentDescription = tr("Hubungkan atau putuskan VPN", "Connect or disconnect VPN")
+            setOnClickListener { if (vpnRunning) disconnectVpn() else connectVpn() }
+        }
+        val connectWrap = LinearLayout(this).apply {
+            orientation = LinearLayout.VERTICAL
+            setPadding(dp(16), dp(8), dp(16), dp(12))
+            setBackgroundColor(primaryColor)
+            addView(connectButton, LinearLayout.LayoutParams(-1, dp(56)))
+        }
+        mainLayout.addView(connectWrap, LinearLayout.LayoutParams(-1, -2))
+
+        // Tabs
+        val tabContainer = LinearLayout(this).apply {
+            orientation = LinearLayout.HORIZONTAL
+            setBackgroundColor(primaryColor)
+            setPadding(dp(16), 0, dp(16), dp(10))
+        }
+        val tabConfig = tabBtn(tr("Koneksi", "Connection"))
+        val tabApps = tabBtn(tr("Per-Aplikasi", "Apps"))
+        tabContainer.addView(tabConfig, LinearLayout.LayoutParams(0, dp(40), 1f).apply { rightMargin = dp(8) })
+        tabContainer.addView(tabApps, LinearLayout.LayoutParams(0, dp(40), 1f))
+        mainLayout.addView(tabContainer)
+
+        val pageHost = FrameLayout(this).apply {
+            layoutParams = LinearLayout.LayoutParams(-1, 0, 1f)
+            setBackgroundColor(bgColor)
+        }
+        val configView = buildConfigLayout()
+        val appsView = buildAppsLayout()
+        fun showPage(index: Int) {
+            currentPageIndex = index
+            pageHost.removeAllViews()
+            setTabSelected(tabConfig, index == 0)
+            setTabSelected(tabApps, index == 1)
+            val target = if (index == 0) configView else { ensureAppsLoaded(); appsView }
+            (target.parent as? ViewGroup)?.removeView(target)
+            pageHost.addView(ScrollView(this).apply {
+                isFillViewport = true
+                addView(target)
+            })
+        }
+        tabConfig.setOnClickListener { showPage(0) }
+        tabApps.setOnClickListener { showPage(1) }
+        mainLayout.addView(pageHost)
         root.addView(mainLayout)
-
-        // Floating Action Button (FAB) Connect/Disconnect
-        fabConnect = FloatingActionButton(this).apply {
-            backgroundTintList = ColorStateList.valueOf(accentFab)
-            setImageResource(android.R.drawable.ic_lock_power_off)
-            setColorFilter(primaryColor)
-            elevation = dp(6).toFloat()
-            setOnClickListener {
-                if (vpnRunning) disconnectVpn() else connectVpn()
-            }
-        }
-        val fabParams = FrameLayout.LayoutParams(-2, -2).apply {
-            gravity = Gravity.BOTTOM or Gravity.END
-            rightMargin = dp(20)
-            bottomMargin = dp(64)
-        }
-        root.addView(fabConnect, fabParams)
-
         setContentView(root)
         showPage(0)
     }
@@ -310,10 +302,10 @@ class MainActivity : Activity() {
             setPadding(dp(16), dp(14), dp(16), dp(16))
         }
         val accountTitle = TextView(this@MainActivity).apply {
-            text = tr("Akun WARP", "WARP Account")
-            textSize = 16f
-            setTypeface(null, Typeface.BOLD)
-            setTextColor(primaryDark)
+            text = tr("Akun WARP MASQUE", "WARP MASQUE Account")
+            textSize = 14f
+            setTypeface(Typeface.create("sans-serif-medium", Typeface.NORMAL))
+            setTextColor(textSub)
         }
         accountInfoText = TextView(this@MainActivity).apply {
             textSize = 12f
@@ -321,12 +313,12 @@ class MainActivity : Activity() {
             setPadding(0, dp(6), 0, dp(8))
         }
         keyValueText = TextView(this@MainActivity).apply {
-    textSize = 12f
-    setTextColor(textMain)
-    setPadding(dp(10), dp(10), dp(10), dp(10))
-    background = round(surfaceColor, dp(8), outlineColor)
-    setTextIsSelectable(true)
-}
+            textSize = 12f
+            setTextColor(textMain)
+            setPadding(dp(10), dp(10), dp(10), dp(10))
+            background = round(surfaceColor, dp(8), outlineColor)
+            setTextIsSelectable(true)
+        }
         val accountButtons = LinearLayout(this@MainActivity).apply { orientation = LinearLayout.HORIZONTAL }
         toggleKeyBtn = MaterialButton(this@MainActivity).apply {
             text = tr("Tampilkan Key", "Show Key")
@@ -414,9 +406,10 @@ class MainActivity : Activity() {
             textSize = 14f
             setTextColor(textSub)
             background = round(surfaceColor, dp(8), outlineColor)
-            setPadding(dp(14), dp(12), dp(14), dp(12))
+            setPadding(dp(14), 0, dp(14), 0)
+            gravity = Gravity.CENTER_VERTICAL
         }
-        cardBox.addView(portLockedView, LinearLayout.LayoutParams(-1, -2))
+        cardBox.addView(portLockedView, LinearLayout.LayoutParams(-1, dp(48)))
 
         // Reset default endpoint button
         val defaultBtn = MaterialButton(this@MainActivity).apply {
@@ -748,30 +741,48 @@ class MainActivity : Activity() {
     private fun refreshAccountInfo() {
         if (!::accountInfoText.isInitialized || !::keyValueText.isInitialized) return
         val file = activeConfigFile
-        if (!isConfigValid(file)) {
+        if (!file.exists() || file.length() == 0L) {
             accountInfoText.text = tr(
-                "Konfigurasi akun belum tersedia. Tambahkan assets/config_default.json atau tekan Update Key.",
-                "No account config found. Add assets/config_default.json or tap Update Key."
+                "Konfigurasi akun belum ditemukan. Pastikan assets/config_default.json ikut di-build atau tekan Update Key.",
+                "Account config not found. Ensure assets/config_default.json is packaged or tap Update Key."
             )
-            keyValueText.text = tr("Key belum tersedia", "Key unavailable")
+            keyValueText.text = tr("Konfigurasi belum tersedia", "Configuration unavailable")
             toggleKeyBtn.text = tr("Tampilkan Key", "Show Key")
             return
         }
+        val registered = isConfigValid(file)
         val json = runCatching { JSONObject(file.readText()) }.getOrNull()
-        val privateKey = json?.optString("private_key", "").orEmpty()
-        val token = json?.optString("access_token", "").orEmpty()
+        if (json == null) {
+            accountInfoText.text = tr("File konfigurasi ada, tetapi JSON tidak valid.", "Config file exists, but its JSON is invalid.")
+            keyValueText.text = tr("JSON tidak dapat dibaca", "Unable to read JSON")
+            toggleKeyBtn.text = tr("Tampilkan Key", "Show Key")
+            return
+        }
         val id = json?.optString("id", "").orEmpty()
         val ipv4 = json?.optString("ipv4", "").orEmpty()
         val usingUpdate = file == updatedConfigFile
         accountInfoText.text = buildString {
             append(if (usingUpdate) tr("Akun aktif: hasil update", "Active account: updated") else tr("Akun aktif: bawaan", "Active account: default"))
+            if (!registered) append("\n" + tr("Status konfigurasi: belum valid untuk core", "Config status: not validated by core"))
             if (id.isNotBlank()) append("\nID: $id")
             if (ipv4.isNotBlank()) append("\nIPv4: $ipv4")
         }
-        keyValueText.text = if (keyVisible) {
-            "Private key:\n${privateKey.ifBlank { "(tidak tersedia)" }}\n\nAccess token:\n${token.ifBlank { "(tidak tersedia)" }}"
+        keyValueText.text = if (json == null) {
+            tr("JSON konfigurasi tidak dapat dibaca", "Configuration JSON could not be read")
+        } else if (keyVisible) {
+            // Display every top-level JSON field. The user explicitly chose to reveal secrets.
+            json.keys().asSequence().toList().sorted().joinToString("\n\n") { key ->
+                val value = json.opt(key)
+                "$key:\n${if (value == null || value == JSONObject.NULL) "(null)" else value.toString()}"
+            }
         } else {
-            "Private key: ${if (privateKey.isBlank()) "(tidak tersedia)" else "••••••••••••"}\nAccess token: ${if (token.isBlank()) "(tidak tersedia)" else "••••••••••••"}"
+            // Keep secret fields masked until the user explicitly taps Show Key.
+            val secretNames = setOf("private_key", "access_token", "license", "token")
+            json.keys().asSequence().toList().sorted().joinToString("\n") { key ->
+                val value = json.opt(key)
+                val shown = if (key.lowercase() in secretNames && value != null && value != JSONObject.NULL && value.toString().isNotBlank()) "••••••••••••" else value?.toString().orEmpty()
+                "$key: $shown"
+            }
         }
         toggleKeyBtn.text = if (keyVisible) tr("Sembunyikan Key", "Hide Key") else tr("Tampilkan Key", "Show Key")
     }
@@ -868,8 +879,10 @@ class MainActivity : Activity() {
         statusText.text = "${tr("Status", "Status")}: $state${if (extra.isNotBlank()) " · $extra" else ""}"
         statusText.setTextColor(if (vpnRunning) connectedGreen else disconnectedRed)
 
-        if (::fabConnect.isInitialized) {
-            fabConnect.backgroundTintList = ColorStateList.valueOf(if (vpnRunning) connectedGreen else accentFab)
+        if (::connectButton.isInitialized) {
+            connectButton.text = if (vpnRunning) tr("PUTUSKAN VPN", "DISCONNECT VPN") else tr("HUBUNGKAN VPN", "CONNECT VPN")
+            connectButton.backgroundTintList = ColorStateList.valueOf(if (vpnRunning) connectedGreen else textMain)
+            connectButton.setTextColor(if (vpnRunning) Color.WHITE else primaryColor)
         }
     }
 
