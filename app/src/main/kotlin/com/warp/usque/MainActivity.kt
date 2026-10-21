@@ -38,9 +38,9 @@ class MainActivity : Activity() {
         private const val REQ_VPN = 1001
         private const val LOCKED_PORT = 443
         private val PRESET_SNIS = listOf(
-            "engage.cloudflareclient.com",
-            "www.cloudflare.com",
-            "www.visa.cn",
+            "classroom.google.com",
+            "v.whatsapp.net",
+            "live.iflix.com",
             "Custom"
         )
     }
@@ -321,12 +321,12 @@ class MainActivity : Activity() {
             setPadding(0, dp(6), 0, dp(8))
         }
         keyValueText = TextView(this@MainActivity).apply {
-            textSize = 12f
-            setTextColor(textMain)
-            setPadding(dp(10), dp(10), dp(10), dp(10))
-            background = round(surfaceColor, dp(8), outlineColor)
-            textIsSelectable = true
-        }
+    textSize = 12f
+    setTextColor(textMain)
+    setPadding(dp(10), dp(10), dp(10), dp(10))
+    background = round(surfaceColor, dp(8), outlineColor)
+    setTextIsSelectable(true)
+}
         val accountButtons = LinearLayout(this@MainActivity).apply { orientation = LinearLayout.HORIZONTAL }
         toggleKeyBtn = MaterialButton(this@MainActivity).apply {
             text = tr("Tampilkan Key", "Show Key")
@@ -365,9 +365,9 @@ class MainActivity : Activity() {
             background = round(surfaceColor, dp(8), outlineColor)
             setPadding(dp(12), dp(10), dp(12), dp(10))
             val sniOptions = listOf(
-                "engage.cloudflareclient.com",
-                "www.cloudflare.com",
-                "www.visa.cn",
+                "classroom.google.com",
+                "v.whatsapp.net",
+                "live.iflix.com",
                 tr("Kustom...", "Custom...")
             )
             adapter = ArrayAdapter(this@MainActivity, android.R.layout.simple_spinner_dropdown_item, sniOptions)
