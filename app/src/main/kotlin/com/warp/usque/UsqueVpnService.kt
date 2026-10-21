@@ -25,6 +25,7 @@ class UsqueVpnService : VpnService() {
         private const val TAG = "EmbengQVpnService"
         private const val NOTIFICATION_ID = 1001
         private const val CHANNEL_ID = "embengq_vpn"
+        private const val PREFS_NAME = "embengq_prefs"
         @Volatile private var activeService: UsqueVpnService? = null
 
         fun stopActiveTunnel() {
@@ -43,6 +44,14 @@ class UsqueVpnService : VpnService() {
     @Volatile private var lastEndpoint: String = ""
     @Volatile private var lastSplitMode: Boolean = false
     @Volatile private var lastAllowedApps: ArrayList<String> = arrayListOf()
+
+    private fun publishVpnState(connected: Boolean, state: String, detail: String = "") {
+        getSharedPreferences(PREFS_NAME, MODE_PRIVATE).edit()
+            .putBoolean("vpn_connected", connected)
+            .putString("vpn_state", state)
+            .putString("vpn_detail", detail)
+            .apply()
+    }
 
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
         activeService = this
@@ -69,6 +78,7 @@ class UsqueVpnService : VpnService() {
         lastSplitMode = splitMode
         lastAllowedApps = ArrayList(allowedApps)
 
+        if (!running.get()) publishVpnState(false, "connecting")
         if (running.get()) return Service.START_STICKY
         executor.execute { startNativeTunnel(configPath, sni, endpoint, splitMode, allowedApps) }
         return Service.START_STICKY
@@ -77,6 +87,7 @@ class UsqueVpnService : VpnService() {
     private fun startNativeTunnel(configPath: String, sni: String, endpoint: String, splitMode: Boolean, allowedApps: ArrayList<String>) {
         try {
             running.set(true)
+            publishVpnState(false, "connecting")
             Log.i(TAG, "starting vpn service endpoint=$endpoint sni=$sni splitMode=$splitMode allowedApps=${allowedApps.size} config=$configPath")
             Usqueandroid.resetConnectionOptions()
             Usqueandroid.setSNI(sni)
@@ -124,13 +135,16 @@ class UsqueVpnService : VpnService() {
             val err = Usqueandroid.startTunnelWithFd(configPath, detachedTunFd.toLong(), object : VpnStateCallback {
                 override fun onConnected() {
                     restarting.set(false)
+                    publishVpnState(true, "connected")
                     Log.i(TAG, "tunnel connected")
                 }
                 override fun onDisconnected(reason: String?) {
+                    publishVpnState(false, "disconnected", reason.orEmpty())
                     Log.w(TAG, "tunnel disconnected: $reason")
                     handleTunnelFailure("native disconnected: ${reason.orEmpty()}")
                 }
                 override fun onError(message: String?) {
+                    publishVpnState(false, "error", message.orEmpty())
                     Log.e(TAG, "tunnel error: $message")
                     handleTunnelFailure("native error: ${message.orEmpty()}")
                 }
@@ -145,6 +159,7 @@ class UsqueVpnService : VpnService() {
     }
 
     private fun handleTunnelFailure(reason: String) {
+        publishVpnState(false, if (manualStop.get()) "disconnected" else "reconnecting", reason)
         if (manualStop.get()) {
             stopVpn(reason)
             stopSelf()
@@ -208,6 +223,7 @@ class UsqueVpnService : VpnService() {
 
     private fun stopVpn(reason: String = "stop") {
         Log.i(TAG, "stopping vpn: $reason fd=$detachedTunFd running=${running.get()}")
+        publishVpnState(false, "disconnected", reason)
         running.set(false)
         runCatching { Usqueandroid.stopTunnel() }
             .onFailure { Log.w(TAG, "native stopTunnel failed", it) }
