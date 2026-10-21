@@ -22,7 +22,6 @@ import com.google.android.material.button.MaterialButton
 import com.google.android.material.card.MaterialCardView
 import com.google.android.material.checkbox.MaterialCheckBox
 import com.google.android.material.divider.MaterialDivider
-import com.google.android.material.floatingactionbutton.FloatingActionButton
 import com.google.android.material.materialswitch.MaterialSwitch
 import com.google.android.material.textfield.TextInputEditText
 import com.google.android.material.textfield.TextInputLayout
@@ -75,7 +74,7 @@ class MainActivity : Activity() {
     private lateinit var speedText: TextView
     private lateinit var logText: TextView
     private lateinit var splitModeSwitch: MaterialSwitch
-    private lateinit var fabConnect: FloatingActionButton
+    private lateinit var connectButton: MaterialButton
     private lateinit var appSearchInput: TextInputEditText
     private lateinit var appListContainer: LinearLayout
     private lateinit var appCountText: TextView
@@ -120,9 +119,22 @@ class MainActivity : Activity() {
         buildUi()
         loadSavedState()
         refreshAccountInfo()
+        syncVpnStateFromService()
         refreshState()
         resetSpeedMeter()
         handler.post(speedTicker)
+    }
+
+    override fun onResume() {
+        super.onResume()
+        // Activity may be recreated while the foreground VPN service keeps running.
+        syncVpnStateFromService()
+        refreshState()
+        updateSpeedLine()
+    }
+
+    private fun syncVpnStateFromService() {
+        vpnRunning = prefs.getBoolean("vpn_connected", false)
     }
 
     override fun onDestroy() {
@@ -220,14 +232,39 @@ class MainActivity : Activity() {
         }
         speedText = TextView(this).apply {
             text = "↓ 0 B/s   ↑ 0 B/s"
-            textSize = 12f
-            setTextColor(Color.rgb(184, 192, 202))
+            textSize = 13f
+            setTextColor(disconnectedRed)
             setPadding(0, dp(2), 0, 0)
         }
         statusBox.addView(statusText)
         statusBox.addView(speedText)
         statusBar.addView(statusBox, LinearLayout.LayoutParams(0, -2, 1f))
         mainLayout.addView(statusBar, LinearLayout.LayoutParams(-1, -2))
+
+        // Large, labeled connection control with a comfortable touch target.
+        connectButton = MaterialButton(this).apply {
+            text = tr("HUBUNGKAN VPN", "CONNECT VPN")
+            textSize = 14f
+            isAllCaps = false
+            setTypeface(null, Typeface.BOLD)
+            cornerRadius = dp(12)
+            minHeight = dp(56)
+            minimumHeight = dp(56)
+            setTextColor(primaryColor)
+            backgroundTintList = ColorStateList.valueOf(textMain)
+            insetTop = 0
+            insetBottom = 0
+            elevation = dp(2).toFloat()
+            contentDescription = tr("Hubungkan atau putuskan VPN", "Connect or disconnect VPN")
+            setOnClickListener { if (vpnRunning) disconnectVpn() else connectVpn() }
+        }
+        val connectWrap = LinearLayout(this).apply {
+            orientation = LinearLayout.VERTICAL
+            setPadding(dp(16), dp(8), dp(16), dp(12))
+            setBackgroundColor(primaryColor)
+            addView(connectButton, LinearLayout.LayoutParams(-1, dp(56)))
+        }
+        mainLayout.addView(connectWrap, LinearLayout.LayoutParams(-1, -2))
 
         // Tabs
         val tabContainer = LinearLayout(this).apply {
@@ -263,22 +300,6 @@ class MainActivity : Activity() {
         tabApps.setOnClickListener { showPage(1) }
         mainLayout.addView(pageHost)
         root.addView(mainLayout)
-
-        // Circular connection control: large enough to tap, kept away from text fields.
-        fabConnect = FloatingActionButton(this).apply {
-            backgroundTintList = ColorStateList.valueOf(accentFab)
-            setImageResource(android.R.drawable.ic_lock_power_off)
-            imageTintList = ColorStateList.valueOf(primaryColor)
-            size = FloatingActionButton.SIZE_NORMAL
-            contentDescription = tr("Hubungkan atau putuskan VPN", "Connect or disconnect VPN")
-            elevation = dp(6).toFloat()
-            setOnClickListener { if (vpnRunning) disconnectVpn() else connectVpn() }
-        }
-        root.addView(fabConnect, FrameLayout.LayoutParams(dp(64), dp(64), Gravity.BOTTOM or Gravity.END).apply {
-            rightMargin = dp(20)
-            bottomMargin = dp(20)
-        })
-
         setContentView(root)
         showPage(0)
     }
@@ -297,7 +318,7 @@ class MainActivity : Activity() {
             text = tr("Akun WARP MASQUE", "WARP MASQUE Account")
             textSize = 14f
             setTypeface(Typeface.create("sans-serif-medium", Typeface.NORMAL))
-            setTextColor(Color.rgb(201, 209, 217))
+            setTextColor(textSub)
         }
         accountInfoText = TextView(this@MainActivity).apply {
             textSize = 12f
@@ -354,30 +375,7 @@ class MainActivity : Activity() {
                 "live.iflix.com",
                 tr("Kustom...", "Custom...")
             )
-            adapter = object : ArrayAdapter<String>(
-                this@MainActivity,
-                android.R.layout.simple_spinner_item,
-                sniOptions
-            ) {
-                override fun getView(position: Int, convertView: View?, parent: ViewGroup): View {
-                    return (super.getView(position, convertView, parent) as TextView).apply {
-                        setTextColor(textMain)
-                        textSize = 14f
-                        gravity = Gravity.CENTER_VERTICAL
-                        setPadding(dp(12), 0, dp(12), 0)
-                    }
-                }
-
-                override fun getDropDownView(position: Int, convertView: View?, parent: ViewGroup): View {
-                    return (super.getDropDownView(position, convertView, parent) as TextView).apply {
-                        setTextColor(textMain)
-                        textSize = 14f
-                        setBackgroundColor(surfaceColor)
-                        setPadding(dp(14), dp(12), dp(14), dp(12))
-                        minHeight = dp(44)
-                    }
-                }
-            }
+            adapter = ArrayAdapter(this@MainActivity, android.R.layout.simple_spinner_dropdown_item, sniOptions)
             onItemSelectedListener = object : AdapterView.OnItemSelectedListener {
                 override fun onItemSelected(p0: AdapterView<*>?, p1: View?, pos: Int, id: Long) {
                     if (::customSniWrap.isInitialized) {
@@ -419,7 +417,7 @@ class MainActivity : Activity() {
         val portLockedView = TextView(this@MainActivity).apply {
             text = "HTTP/3 over UDP/QUIC"
             textSize = 14f
-            setTextColor(Color.rgb(201, 209, 217))
+            setTextColor(textSub)
             background = round(surfaceColor, dp(8), outlineColor)
             setPadding(dp(14), 0, dp(14), 0)
             gravity = Gravity.CENTER_VERTICAL
@@ -432,7 +430,7 @@ class MainActivity : Activity() {
             textSize = 13f
             isAllCaps = false
             cornerRadius = dp(8)
-            setTextColor(textMain)
+            setTextColor(primaryColor)
             backgroundTintList = ColorStateList.valueOf(Color.rgb(33, 38, 45))
             setOnClickListener {
                 val def = Usqueandroid.getDefaultEndpoint(activeConfigFile.absolutePath)
@@ -553,18 +551,14 @@ class MainActivity : Activity() {
         isAllCaps = false
         textSize = 13f
         cornerRadius = dp(19)
-        minHeight = dp(40)
-        minimumHeight = dp(40)
-        insetTop = 0
-        insetBottom = 0
-        setTextColor(textMain)
-        backgroundTintList = ColorStateList.valueOf(surfaceColor)
+        minHeight = dp(36)
+        setTextColor(Color.WHITE)
+        backgroundTintList = ColorStateList.valueOf(Color.argb(40, 255, 255, 255))
     }
 
     private fun setTabSelected(btn: MaterialButton, selected: Boolean) {
-        // Selected tab is white with dark text; unselected tab is dark with light text.
-        btn.setTextColor(if (selected) primaryColor else textMain)
-        btn.backgroundTintList = ColorStateList.valueOf(if (selected) textMain else surfaceColor)
+        btn.setTextColor(if (selected) primaryDark else Color.WHITE)
+        btn.backgroundTintList = ColorStateList.valueOf(if (selected) Color.WHITE else Color.argb(40, 255, 255, 255))
     }
 
     private fun cardContainer() = MaterialCardView(this).apply {
@@ -578,10 +572,10 @@ class MainActivity : Activity() {
 
     private fun label(title: String) = TextView(this).apply {
         text = title
-        textSize = 13f
+        textSize = 12f
         setTypeface(null, Typeface.BOLD)
-        setTextColor(Color.rgb(201, 209, 217))
-        setPadding(dp(2), 0, dp(2), dp(6))
+        setTextColor(textSub)
+        setPadding(dp(2), 0, dp(2), dp(4))
     }
 
     private fun inputWrap(labelStr: String, edit: TextInputEditText) = LinearLayout(this).apply {
@@ -592,8 +586,7 @@ class MainActivity : Activity() {
             boxBackgroundMode = TextInputLayout.BOX_BACKGROUND_OUTLINE
             boxBackgroundColor = surfaceColor
             setBoxCornerRadii(dp(8).toFloat(), dp(8).toFloat(), dp(8).toFloat(), dp(8).toFloat())
-            setBoxStrokeColor(Color.rgb(100, 110, 120))
-            edit.setHintTextColor(Color.rgb(170, 178, 188))
+            setBoxStrokeColor(primaryColor)
             addView(edit)
         }, LinearLayout.LayoutParams(-1, dp(48)))
     }
@@ -861,15 +854,20 @@ class MainActivity : Activity() {
         lastRxBytes = TrafficStats.getTotalRxBytes().takeIf { it >= 0 } ?: 0L
         lastTxBytes = TrafficStats.getTotalTxBytes().takeIf { it >= 0 } ?: 0L
         lastSpeedTs = System.currentTimeMillis()
-        if (::speedText.isInitialized) speedText.text = "↓ 0 B/s   ↑ 0 B/s"
+        if (::speedText.isInitialized) {
+            speedText.text = "↓ 0 B/s   ↑ 0 B/s"
+            speedText.setTextColor(if (vpnRunning) connectedGreen else disconnectedRed)
+        }
     }
 
     private fun updateSpeedLine() {
         if (!::speedText.isInitialized) return
         if (!vpnRunning) {
             speedText.text = "↓ 0 B/s   ↑ 0 B/s"
+            speedText.setTextColor(disconnectedRed)
             return
         }
+        speedText.setTextColor(connectedGreen)
         val now = System.currentTimeMillis()
         val rx = TrafficStats.getTotalRxBytes().takeIf { it >= 0 } ?: return
         val tx = TrafficStats.getTotalTxBytes().takeIf { it >= 0 } ?: return
@@ -899,14 +897,10 @@ class MainActivity : Activity() {
         statusText.text = "${tr("Status", "Status")}: $state${if (extra.isNotBlank()) " · $extra" else ""}"
         statusText.setTextColor(if (vpnRunning) connectedGreen else disconnectedRed)
 
-        if (::fabConnect.isInitialized) {
-            fabConnect.backgroundTintList = ColorStateList.valueOf(if (vpnRunning) connectedGreen else textMain)
-            fabConnect.imageTintList = ColorStateList.valueOf(primaryColor)
-            fabConnect.contentDescription = if (vpnRunning) {
-                tr("Putuskan VPN", "Disconnect VPN")
-            } else {
-                tr("Hubungkan VPN", "Connect VPN")
-            }
+        if (::connectButton.isInitialized) {
+            connectButton.text = if (vpnRunning) tr("PUTUSKAN VPN", "DISCONNECT VPN") else tr("HUBUNGKAN VPN", "CONNECT VPN")
+            connectButton.backgroundTintList = ColorStateList.valueOf(if (vpnRunning) connectedGreen else textMain)
+            connectButton.setTextColor(if (vpnRunning) Color.WHITE else primaryColor)
         }
     }
 
@@ -947,7 +941,8 @@ class MainActivity : Activity() {
 
         log("")
         resetSpeedMeter()
-        vpnRunning = true
+        vpnRunning = false
+        prefs.edit().putBoolean("vpn_connected", false).putString("vpn_state", "connecting").apply()
         refreshState(tr("Menghubungkan…", "Connecting…"))
 
         val intent = Intent(this, UsqueVpnService::class.java)
@@ -957,13 +952,13 @@ class MainActivity : Activity() {
             .putExtra("splitMode", splitMode)
             .putStringArrayListExtra("allowedApps", allowedApps)
         startService(intent)
-
-        refreshState(if (splitMode) tr("Bagi terowongan aktif", "Split tunneling active") else tr("Global aktif", "Global active"))
+        // The service callback will mark the UI connected only after the native tunnel connects.
     }
 
     private fun disconnectVpn() {
         log(tr("Menghentikan layanan VPN…", "Stopping VPN service…"))
         vpnRunning = false
+        prefs.edit().putBoolean("vpn_connected", false).putString("vpn_state", "stopping").apply()
         refreshState(tr("Menghentikan…", "Stopping…"))
         resetSpeedMeter()
 
@@ -972,6 +967,7 @@ class MainActivity : Activity() {
         handler.postDelayed(Runnable {
             runCatching { stopService(Intent(this, UsqueVpnService::class.java)) }
             vpnRunning = false
+            prefs.edit().putBoolean("vpn_connected", false).putString("vpn_state", "disconnected").apply()
             refreshState(tr("Terputus", "Disconnected"))
             log(tr("VPN telah dinonaktifkan.", "VPN stopped."))
         }, 500L)
