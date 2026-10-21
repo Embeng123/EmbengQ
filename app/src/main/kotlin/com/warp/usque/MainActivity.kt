@@ -49,7 +49,8 @@ class MainActivity : Activity() {
     private val handler = Handler(Looper.getMainLooper())
     private val executor = Executors.newSingleThreadExecutor()
     private val prefs by lazy { getSharedPreferences("embengq_prefs", MODE_PRIVATE) }
-    // User-provided config.json; config_update.json stores a newly registered account.
+    // config.json is the bundled/default account copied from assets on first launch.
+    // config_update.json stores a newly registered account. Keep the default as fallback.
     private val configFile by lazy { File(filesDir, "config.json") }
     private val updatedConfigFile by lazy { File(filesDir, "config_update.json") }
     private val candidateConfigFile by lazy { File(filesDir, "config_update_candidate.json") }
@@ -108,7 +109,7 @@ class MainActivity : Activity() {
     private val bgColor = Color.rgb(13, 17, 23)
     private val surfaceColor = Color.rgb(22, 27, 34)
     private val textMain = Color.rgb(240, 246, 252)
-    private val textSub = Color.rgb(185, 192, 200)
+    private val textSub = Color.rgb(139, 148, 158)
     private val outlineColor = Color.rgb(48, 54, 61)
 
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -319,9 +320,9 @@ class MainActivity : Activity() {
             setTextColor(textSub)
         }
         accountInfoText = TextView(this@MainActivity).apply {
-            visibility = View.GONE
             textSize = 12f
             setTextColor(textSub)
+            setPadding(0, dp(6), 0, dp(8))
         }
         keyValueText = TextView(this@MainActivity).apply {
             textSize = 12f
@@ -348,7 +349,8 @@ class MainActivity : Activity() {
         }
         accountButtons.addView(toggleKeyBtn, LinearLayout.LayoutParams(0, dp(42), 1f).apply { rightMargin = dp(8) })
         accountButtons.addView(updateKeyBtn, LinearLayout.LayoutParams(0, dp(42), 1f))
-        // Keep account metadata hidden to save vertical space.
+        accountBox.addView(accountTitle)
+        accountBox.addView(accountInfoText)
         accountBox.addView(keyValueText)
         accountBox.addView(accountButtons)
         accountCard.addView(accountBox)
@@ -741,8 +743,8 @@ class MainActivity : Activity() {
         val file = activeConfigFile
         if (!file.exists() || file.length() == 0L) {
             accountInfoText.text = tr(
-                "Konfigurasi belum tersedia. Tekan Update Key untuk membuat akun.",
-                "No configuration yet. Tap Update Key to register an account."
+                "Konfigurasi akun belum ditemukan. Pastikan assets/config_default.json ikut di-build atau tekan Update Key.",
+                "Account config not found. Ensure assets/config_default.json is packaged or tap Update Key."
             )
             keyValueText.text = tr("Konfigurasi belum tersedia", "Configuration unavailable")
             toggleKeyBtn.text = tr("Tampilkan Key", "Show Key")
@@ -901,7 +903,7 @@ class MainActivity : Activity() {
         }
         if (!hasValidRegistration()) {
             refreshAccountInfo()
-            log(tr("Konfigurasi belum tersedia atau tidak valid. Tekan Update Key terlebih dahulu.", "Configuration is missing or invalid. Tap Update Key first."))
+            log(tr("Konfigurasi akun bawaan tidak ditemukan atau tidak valid. Tambahkan assets/config_default.json atau tekan Update Key.", "Default account config is missing or invalid. Add assets/config_default.json or tap Update Key."))
             toast(tr("Konfigurasi akun belum tersedia", "Account configuration unavailable"))
             return
         }
