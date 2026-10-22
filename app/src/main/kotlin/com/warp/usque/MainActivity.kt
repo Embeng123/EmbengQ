@@ -27,8 +27,6 @@ import com.google.android.material.textfield.TextInputEditText
 import com.google.android.material.textfield.TextInputLayout
 import usqueandroid.Usqueandroid
 import java.io.File
-import java.io.FileInputStream
-import java.io.FileOutputStream
 import org.json.JSONObject
 import java.util.concurrent.Executors
 
@@ -50,7 +48,6 @@ class MainActivity : Activity() {
     private val executor = Executors.newSingleThreadExecutor()
     private val prefs by lazy { getSharedPreferences("embengq_prefs", MODE_PRIVATE) }
     
-    // User-provided config.json; config_update.json stores a newly registered account.
     private val configFile by lazy { File(filesDir, "config.json") }
     private val updatedConfigFile by lazy { File(filesDir, "config_update.json") }
     private val candidateConfigFile by lazy { File(filesDir, "config_update_candidate.json") }
@@ -100,12 +97,11 @@ class MainActivity : Activity() {
     private val allApps = mutableListOf<AppEntry>()
     private val selectedPackages = linkedSetOf<String>()
 
-    // Palette Warna ala GitHub Dark / v2rayNG 2022
+    // Palette Warna GitHub Dark / v2rayNG Style
     private val bgColor = Color.rgb(13, 17, 23)          // #0D1117
     private val surfaceColor = Color.rgb(22, 27, 34)     // #161B22
     private val surfaceVariant = Color.rgb(33, 38, 45)   // #21262D
     private val primaryColor = Color.rgb(13, 17, 23)
-    private val primaryDark = Color.rgb(240, 246, 252)
     private val accentColor = Color.rgb(88, 166, 255)     // #58A6FF
     private val connectedGreen = Color.rgb(63, 185, 80)
     private val disconnectedRed = Color.rgb(248, 81, 73)
@@ -315,7 +311,6 @@ class MainActivity : Activity() {
         orientation = LinearLayout.VERTICAL
         setPadding(dp(16), dp(16), dp(16), dp(80))
 
-        // Account / Key Management Card
         val accountCard = cardContainer()
         val accountBox = LinearLayout(this@MainActivity).apply {
             orientation = LinearLayout.VERTICAL
@@ -362,7 +357,6 @@ class MainActivity : Activity() {
         accountButtons.addView(toggleKeyBtn, LinearLayout.LayoutParams(0, dp(42), 1f).apply { rightMargin = dp(8) })
         accountButtons.addView(updateKeyBtn, LinearLayout.LayoutParams(0, dp(42), 1f))
 
-        // DIBENARKAN: Komponen accountTitle dan accountInfoText sekarang dimasukkan ke layout
         accountBox.addView(accountTitle)
         accountBox.addView(accountInfoText)
         accountBox.addView(keyValueText)
@@ -378,7 +372,6 @@ class MainActivity : Activity() {
             setPadding(dp(16), dp(14), dp(16), dp(16))
         }
 
-        // Dropdown Pilihan SNI
         cardBox.addView(label(tr("Pilihan SNI", "SNI Option")))
         sniSpinner = Spinner(this@MainActivity).apply {
             background = round(surfaceColor, dp(8), outlineColor)
@@ -420,7 +413,6 @@ class MainActivity : Activity() {
         }
         cardBox.addView(sniSpinner, LinearLayout.LayoutParams(-1, dp(48)))
 
-        // Custom SNI Field
         customSniInput = TextInputEditText(this@MainActivity).apply {
             hint = "e.g. your-sni.com"
             setHintTextColor(textSub)
@@ -434,7 +426,6 @@ class MainActivity : Activity() {
         }
         cardBox.addView(customSniWrap)
 
-        // Endpoint IP Input
         cardBox.addView(space(10))
         endpointInput = TextInputEditText(this@MainActivity).apply {
             hint = "162.159.198.2"
@@ -446,7 +437,6 @@ class MainActivity : Activity() {
         }
         cardBox.addView(inputWrap(tr("Endpoint IP", "Endpoint IP"), endpointInput))
 
-        // Protocol Info
         cardBox.addView(space(10))
         cardBox.addView(label(tr("Protokol", "Protocol")))
         val portLockedView = TextView(this@MainActivity).apply {
@@ -459,13 +449,12 @@ class MainActivity : Activity() {
         }
         cardBox.addView(portLockedView, LinearLayout.LayoutParams(-1, dp(48)))
 
-        // Reset default endpoint button
         val defaultBtn = MaterialButton(this@MainActivity).apply {
             text = tr("Gunakan Endpoint Bawaan", "Use Default Endpoint")
             textSize = 13f
             isAllCaps = false
             cornerRadius = dp(8)
-            setTextColor(textMain) // DIBENARKAN: Sebelumya primaryColor (gelap/tak kelihatan)
+            setTextColor(textMain)
             backgroundTintList = ColorStateList.valueOf(surfaceVariant)
             setOnClickListener {
                 val def = Usqueandroid.getDefaultEndpoint(activeConfigFile.absolutePath)
@@ -478,7 +467,6 @@ class MainActivity : Activity() {
         card.addView(cardBox)
         addView(card)
 
-        // Mode Proxy Card
         addView(space(12))
         val modeCard = cardContainer()
         val modeBox = LinearLayout(this@MainActivity).apply {
@@ -506,7 +494,6 @@ class MainActivity : Activity() {
         modeCard.addView(modeBox)
         addView(modeCard)
 
-        // Log / Info Ringkas
         addView(space(12))
         logText = TextView(this@MainActivity).apply {
             text = tr("Siap terhubung.", "Ready to connect.")
@@ -554,7 +541,7 @@ class MainActivity : Activity() {
             textSize = 12f
             isAllCaps = false
             cornerRadius = dp(8)
-            setTextColor(textMain) // DIBENARKAN: Sebelumya primaryColor (tak kelihatan)
+            setTextColor(textMain)
             backgroundTintList = ColorStateList.valueOf(surfaceVariant)
             setOnClickListener { selectAllVisibleApps() }
         }
@@ -563,7 +550,7 @@ class MainActivity : Activity() {
             textSize = 12f
             isAllCaps = false
             cornerRadius = dp(8)
-            setTextColor(textMain) // DIBENARKAN: Sebelumya textSub (rendah kontras)
+            setTextColor(textMain)
             backgroundTintList = ColorStateList.valueOf(surfaceVariant)
             setOnClickListener { clearAllVisibleApps() }
         }
@@ -592,7 +579,6 @@ class MainActivity : Activity() {
         backgroundTintList = ColorStateList.valueOf(Color.argb(30, 255, 255, 255))
     }
 
-    // DIBENARKAN: Warna teks tab aktif di-set ke bgColor (gelap) agar kontras di atas latar putih
     private fun setTabSelected(btn: MaterialButton, selected: Boolean) {
         if (selected) {
             btn.setTextColor(bgColor)
@@ -620,7 +606,6 @@ class MainActivity : Activity() {
         setPadding(dp(2), 0, dp(2), dp(4))
     }
 
-    // DIBENARKAN: Outlined Stroke diubah dari primaryColor ke outlineColor
     private fun inputWrap(labelStr: String, edit: TextInputEditText) = LinearLayout(this).apply {
         orientation = LinearLayout.VERTICAL
         addView(label(labelStr))
@@ -845,3 +830,159 @@ class MainActivity : Activity() {
                 if (!valid) {
                     error = result?.takeIf { it.isNotBlank() }
                         ?: tr("Registrasi gagal atau konfigurasi baru tidak valid", "Registration failed or new config is invalid")
+                } else {
+                    if (updatedConfigFile.exists()) updatedConfigFile.delete()
+                    candidateConfigFile.renameTo(updatedConfigFile)
+                }
+            } catch (e: Exception) {
+                error = e.message ?: e.javaClass.simpleName
+            }
+
+            handler.post {
+                updatingKey = false
+                if (error == null) {
+                    toast(tr("Akun WARP berhasil diperbarui!", "WARP account successfully updated!"))
+                    log(tr("Update key berhasil.", "Key update successful."))
+                    refreshAccountInfo()
+                } else {
+                    toast(tr("Gagal update key: $error", "Failed to update key: $error"))
+                    log(tr("Gagal update key: $error", "Failed to update key: $error"))
+                }
+            }
+        }
+    }
+
+    private fun connectVpn() {
+        if (configDirty) saveInputs()
+
+        if (!hasValidRegistration()) {
+            toast(tr("Konfigurasi belum valid. Silakan Update Key dulu.", "Config invalid. Please Update Key first."))
+            return
+        }
+
+        val intent = VpnService.prepare(this)
+        if (intent != null) {
+            vpnGranted = false
+            startActivityForResult(intent, REQ_VPN)
+        } else {
+            vpnGranted = true
+            startVpnServiceInternal()
+        }
+    }
+
+    override fun onActivityResult(requestCode: Int, resultCode: Int, data: Intent?) {
+        super.onActivityResult(requestCode, resultCode, data)
+        if (requestCode == REQ_VPN) {
+            if (resultCode == RESULT_OK) {
+                vpnGranted = true
+                startVpnServiceInternal()
+            } else {
+                vpnGranted = false
+                toast(tr("Izin VPN ditolak", "VPN permission denied"))
+                log(tr("Izin VPN ditolak oleh pengguna", "VPN permission denied by user"))
+            }
+        }
+    }
+
+    private fun startVpnServiceInternal() {
+        val serviceIntent = Intent(this, UsqueVpnService::class.java).apply {
+            putExtra("configPath", activeConfigFile.absolutePath)
+            putExtra("sni", currentSelectedSni())
+            putExtra("endpoint", normalizedEndpointHost() + ":$LOCKED_PORT")
+            putExtra("splitMode", splitModeSwitch.isChecked)
+            putStringArrayListExtra("allowedApps", ArrayList(selectedPackages))
+        }
+        if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.O) {
+            startForegroundService(serviceIntent)
+        } else {
+            startService(serviceIntent)
+        }
+        vpnRunning = true
+        refreshState()
+        log(tr("Memulai koneksi VPN...", "Starting VPN connection..."))
+    }
+
+    private fun disconnectVpn() {
+        val serviceIntent = Intent(this, UsqueVpnService::class.java).apply {
+            action = UsqueVpnService.ACTION_STOP
+        }
+        startService(serviceIntent)
+        UsqueVpnService.stopActiveTunnel()
+        vpnRunning = false
+        refreshState()
+        resetSpeedMeter()
+        log(tr("Terputus dari VPN.", "Disconnected from VPN."))
+    }
+
+    private fun refreshState() {
+        syncVpnStateFromService()
+        val stateStr = prefs.getString("vpn_state", if (vpnRunning) "connected" else "disconnected") ?: "disconnected"
+        val detail = prefs.getString("vpn_detail", "") ?: ""
+
+        if (vpnRunning || stateStr == "connected") {
+            statusText.text = tr("Status: Terhubung", "Status: Connected")
+            statusText.setTextColor(connectedGreen)
+            connectButton.text = tr("PUTUSKAN VPN", "DISCONNECT VPN")
+            connectButton.backgroundTintList = ColorStateList.valueOf(disconnectedRed)
+            connectButton.setTextColor(Color.WHITE)
+        } else if (stateStr == "connecting" || stateStr == "reconnecting") {
+            statusText.text = if (stateStr == "connecting") tr("Status: Menghubungkan...", "Status: Connecting...") else tr("Status: Menghubungkan Ulang...", "Status: Reconnecting...")
+            statusText.setTextColor(accentColor)
+            connectButton.text = tr("MEMBATALKAN...", "CANCEL...")
+            connectButton.backgroundTintList = ColorStateList.valueOf(surfaceVariant)
+            connectButton.setTextColor(textMain)
+        } else {
+            statusText.text = tr("Status: Terputus", "Status: Disconnected")
+            statusText.setTextColor(disconnectedRed)
+            connectButton.text = tr("HUBUNGKAN VPN", "CONNECT VPN")
+            connectButton.backgroundTintList = ColorStateList.valueOf(textMain)
+            connectButton.setTextColor(bgColor)
+            resetSpeedMeter()
+        }
+
+        if (detail.isNotBlank()) {
+            log("${tr("Status", "Status")}: $stateStr ($detail)")
+        }
+    }
+
+    private fun resetSpeedMeter() {
+        lastRxBytes = TrafficStats.getTotalRxBytes()
+        lastTxBytes = TrafficStats.getTotalTxBytes()
+        lastSpeedTs = System.currentTimeMillis()
+        if (::speedText.isInitialized) {
+            speedText.text = "↓ 0 B/s   ↑ 0 B/s"
+            speedText.setTextColor(if (vpnRunning) connectedGreen else disconnectedRed)
+        }
+    }
+
+    private fun updateSpeedLine() {
+        if (!::speedText.isInitialized) return
+        val now = System.currentTimeMillis()
+        val currentRx = TrafficStats.getTotalRxBytes()
+        val currentTx = TrafficStats.getTotalTxBytes()
+
+        if (lastSpeedTs > 0L && now > lastSpeedTs) {
+            val dt = (now - lastSpeedTs) / 1000.0
+            val rxDiff = if (currentRx >= lastRxBytes && lastRxBytes >= 0) currentRx - lastRxBytes else 0L
+            val txDiff = if (currentTx >= lastTxBytes && lastTxBytes >= 0) currentTx - lastTxBytes else 0L
+
+            val rxSpeed = (rxDiff / dt).toLong()
+            val txSpeed = (txDiff / dt).toLong()
+
+            speedText.text = "↓ ${formatSpeed(rxSpeed)}   ↑ ${formatSpeed(txSpeed)}"
+            speedText.setTextColor(if (vpnRunning) connectedGreen else disconnectedRed)
+        }
+
+        lastRxBytes = currentRx
+        lastTxBytes = currentTx
+        lastSpeedTs = now
+    }
+
+    private fun formatSpeed(bytesPerSec: Long): String {
+        return when {
+            bytesPerSec >= 1024 * 1024 -> String.format("%.1f MB/s", bytesPerSec / (1024.0 * 1024.0))
+            bytesPerSec >= 1024 -> String.format("%.1f KB/s", bytesPerSec / 1024.0)
+            else -> "$bytesPerSec B/s"
+        }
+    }
+}
