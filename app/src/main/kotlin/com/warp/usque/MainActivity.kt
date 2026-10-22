@@ -2,6 +2,7 @@ package com.warp.usque
 
 import android.app.Activity
 import android.content.Intent
+import android.content.SharedPreferences
 import android.content.pm.PackageManager
 import android.content.res.ColorStateList
 import android.graphics.Color
@@ -82,6 +83,13 @@ class MainActivity : Activity() {
     private var keyVisible = false
     private var updatingKey = false
 
+    // Preference Listener untuk update UI realtime dari Service
+    private val prefChangeListener = SharedPreferences.OnSharedPreferenceChangeListener { _, key ->
+        if (key == "vpn_connected" || key == "vpn_state" || key == "vpn_detail") {
+            handler.post { refreshState() }
+        }
+    }
+
     // Traffic Stats
     private var lastRxBytes = 0L
     private var lastTxBytes = 0L
@@ -97,7 +105,7 @@ class MainActivity : Activity() {
     private val allApps = mutableListOf<AppEntry>()
     private val selectedPackages = linkedSetOf<String>()
 
-    // Palette Warna GitHub Dark / v2rayNG Style
+    // Palette Warna
     private val bgColor = Color.rgb(13, 17, 23)          // #0D1117
     private val surfaceColor = Color.rgb(22, 27, 34)     // #161B22
     private val surfaceVariant = Color.rgb(33, 38, 45)   // #21262D
@@ -105,13 +113,18 @@ class MainActivity : Activity() {
     private val accentColor = Color.rgb(88, 166, 255)     // #58A6FF
     private val connectedGreen = Color.rgb(63, 185, 80)
     private val disconnectedRed = Color.rgb(248, 81, 73)
-    private val textMain = Color.rgb(240, 246, 252)        // Teks Utama Terang
-    private val textSub = Color.rgb(139, 148, 158)       // Teks Sekunder Muted
-    private val outlineColor = Color.rgb(48, 54, 61)     // Border Outline
+    private val textMain = Color.rgb(240, 246, 252)
+    private val textSub = Color.rgb(139, 148, 158)
+    private val outlineColor = Color.rgb(48, 54, 61)
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         useEnglish = prefs.getBoolean("useEnglish", false)
+        
+        // Inisialisasi fallback variabel internal
+        endpointInput = TextInputEditText(this).apply { setText("162.159.198.2") }
+        accountInfoText = TextView(this)
+
         buildUi()
         loadSavedState()
         refreshAccountInfo()
@@ -122,6 +135,7 @@ class MainActivity : Activity() {
 
     override fun onResume() {
         super.onResume()
+        prefs.registerOnSharedPreferenceChangeListener(prefChangeListener)
         syncVpnStateFromService()
         refreshState()
         resetSpeedMeter()
@@ -130,6 +144,7 @@ class MainActivity : Activity() {
     }
 
     override fun onPause() {
+        prefs.unregisterOnSharedPreferenceChangeListener(prefChangeListener)
         handler.removeCallbacks(speedTicker)
         super.onPause()
     }
@@ -222,7 +237,7 @@ class MainActivity : Activity() {
         val statusBar = LinearLayout(this).apply {
             orientation = LinearLayout.HORIZONTAL
             gravity = Gravity.CENTER_VERTICAL
-            setPadding(dp(20), dp(7), dp(20), dp(8))
+            setPadding(dp(20), dp(10), dp(20), dp(12))
             setBackgroundColor(primaryColor)
         }
         val statusBox = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL }
@@ -242,31 +257,6 @@ class MainActivity : Activity() {
         statusBox.addView(speedText)
         statusBar.addView(statusBox, LinearLayout.LayoutParams(0, -2, 1f))
         mainLayout.addView(statusBar, LinearLayout.LayoutParams(-1, -2))
-
-        // Connect Button
-        connectButton = MaterialButton(this).apply {
-            text = tr("HUBUNGKAN VPN", "CONNECT VPN")
-            textSize = 14f
-            isAllCaps = false
-            setTypeface(null, Typeface.BOLD)
-            cornerRadius = dp(12)
-            minHeight = dp(56)
-            minimumHeight = dp(56)
-            setTextColor(bgColor)
-            backgroundTintList = ColorStateList.valueOf(textMain)
-            insetTop = 0
-            insetBottom = 0
-            elevation = dp(2).toFloat()
-            contentDescription = tr("Hubungkan atau putuskan VPN", "Connect or disconnect VPN")
-            setOnClickListener { if (vpnRunning) disconnectVpn() else connectVpn() }
-        }
-        val connectWrap = LinearLayout(this).apply {
-            orientation = LinearLayout.VERTICAL
-            setPadding(dp(16), dp(8), dp(16), dp(12))
-            setBackgroundColor(primaryColor)
-            addView(connectButton, LinearLayout.LayoutParams(-1, dp(56)))
-        }
-        mainLayout.addView(connectWrap, LinearLayout.LayoutParams(-1, -2))
 
         // Tabs
         val tabContainer = LinearLayout(this).apply {
@@ -303,30 +293,54 @@ class MainActivity : Activity() {
         tabApps.setOnClickListener { showPage(1) }
         mainLayout.addView(pageHost)
         root.addView(mainLayout)
+
+        // Tombol Konek Bulat Modern di Bagian Bawah Layar
+        connectButton = MaterialButton(this).apply {
+            text = tr("HUBUNGKAN VPN", "CONNECT VPN")
+            textSize = 14f
+            isAllCaps = false
+            setTypeface(null, Typeface.BOLD)
+            cornerRadius = dp(28) // Desain membulat modern
+            minHeight = dp(56)
+            minimumHeight = dp(56)
+            setTextColor(bgColor)
+            backgroundTintList = ColorStateList.valueOf(textMain)
+            insetTop = 0
+            insetBottom = 0
+            elevation = dp(6).toFloat()
+            contentDescription = tr("Hubungkan atau putuskan VPN", "Connect or disconnect VPN")
+            setOnClickListener { if (vpnRunning) disconnectVpn() else connectVpn() }
+        }
+
+        val connectWrap = FrameLayout(this).apply {
+            layoutParams = FrameLayout.LayoutParams(-1, -2, Gravity.BOTTOM).apply {
+                setMargins(dp(24), 0, dp(24), dp(20))
+            }
+            addView(connectButton, FrameLayout.LayoutParams(-1, dp(56)))
+        }
+        root.addView(connectWrap)
+
         setContentView(root)
         showPage(0)
     }
 
     private fun buildConfigLayout(): View = LinearLayout(this).apply {
         orientation = LinearLayout.VERTICAL
-        setPadding(dp(16), dp(16), dp(16), dp(80))
+        setPadding(dp(16), dp(16), dp(16), dp(100)) // Padding bawah ekstra agar tidak tertutup tombol
 
+        // Card Akun MASQUE
         val accountCard = cardContainer()
         val accountBox = LinearLayout(this@MainActivity).apply {
             orientation = LinearLayout.VERTICAL
             setPadding(dp(16), dp(14), dp(16), dp(16))
         }
         val accountTitle = TextView(this@MainActivity).apply {
-            text = tr("Akun WARP MASQUE", "WARP MASQUE Account")
+            text = tr("Akun MASQUE", "MASQUE Account") // WARP dihapus
             textSize = 14f
             setTypeface(null, Typeface.BOLD)
             setTextColor(textMain)
         }
-        accountInfoText = TextView(this@MainActivity).apply {
-            textSize = 12f
-            setTextColor(textSub)
-            setPadding(0, dp(4), 0, dp(8))
-        }
+
         keyValueText = TextView(this@MainActivity).apply {
             textSize = 12f
             setTextColor(textMain)
@@ -358,7 +372,7 @@ class MainActivity : Activity() {
         accountButtons.addView(updateKeyBtn, LinearLayout.LayoutParams(0, dp(42), 1f))
 
         accountBox.addView(accountTitle)
-        accountBox.addView(accountInfoText)
+        accountBox.addView(space(8))
         accountBox.addView(keyValueText)
         accountBox.addView(space(10))
         accountBox.addView(accountButtons)
@@ -366,6 +380,7 @@ class MainActivity : Activity() {
         addView(accountCard)
         addView(space(12))
 
+        // Card Pilihan SNI (Endpoint IP, Protokol & Tombol Endpoint Bawaan Dihapus)
         val card = cardContainer()
         val cardBox = LinearLayout(this@MainActivity).apply {
             orientation = LinearLayout.VERTICAL
@@ -426,47 +441,10 @@ class MainActivity : Activity() {
         }
         cardBox.addView(customSniWrap)
 
-        cardBox.addView(space(10))
-        endpointInput = TextInputEditText(this@MainActivity).apply {
-            hint = "162.159.198.2"
-            setHintTextColor(textSub)
-            setTextColor(textMain)
-            textSize = 14f
-            isSingleLine = true
-            addTextChangedListener(dirtyWatcher())
-        }
-        cardBox.addView(inputWrap(tr("Endpoint IP", "Endpoint IP"), endpointInput))
-
-        cardBox.addView(space(10))
-        cardBox.addView(label(tr("Protokol", "Protocol")))
-        val portLockedView = TextView(this@MainActivity).apply {
-            text = "HTTP/3 over UDP/QUIC (Port 443)"
-            textSize = 14f
-            setTextColor(textSub)
-            background = round(surfaceColor, dp(8), outlineColor)
-            setPadding(dp(14), 0, dp(14), 0)
-            gravity = Gravity.CENTER_VERTICAL
-        }
-        cardBox.addView(portLockedView, LinearLayout.LayoutParams(-1, dp(48)))
-
-        val defaultBtn = MaterialButton(this@MainActivity).apply {
-            text = tr("Gunakan Endpoint Bawaan", "Use Default Endpoint")
-            textSize = 13f
-            isAllCaps = false
-            cornerRadius = dp(8)
-            setTextColor(textMain)
-            backgroundTintList = ColorStateList.valueOf(surfaceVariant)
-            setOnClickListener {
-                val def = Usqueandroid.getDefaultEndpoint(activeConfigFile.absolutePath)
-                endpointInput.setText(parseEndpointHost(def))
-                toast(tr("Endpoint bawaan dimuat", "Default endpoint loaded"))
-            }
-        }
-        cardBox.addView(defaultBtn, LinearLayout.LayoutParams(-1, dp(44)).apply { topMargin = dp(12) })
-
         card.addView(cardBox)
         addView(card)
 
+        // Mode Proxy Card
         addView(space(12))
         val modeCard = cardContainer()
         val modeBox = LinearLayout(this@MainActivity).apply {
@@ -494,6 +472,7 @@ class MainActivity : Activity() {
         modeCard.addView(modeBox)
         addView(modeCard)
 
+        // Log / Info Ringkas
         addView(space(12))
         logText = TextView(this@MainActivity).apply {
             text = tr("Siap terhubung.", "Ready to connect.")
@@ -506,7 +485,7 @@ class MainActivity : Activity() {
 
     private fun buildAppsLayout(): View = LinearLayout(this).apply {
         orientation = LinearLayout.VERTICAL
-        setPadding(dp(16), dp(16), dp(16), dp(80))
+        setPadding(dp(16), dp(16), dp(16), dp(100))
 
         val card = cardContainer()
         val appBox = LinearLayout(this@MainActivity).apply {
@@ -769,33 +748,18 @@ class MainActivity : Activity() {
     private fun hasValidRegistration(): Boolean = isConfigValid(activeConfigFile)
 
     private fun refreshAccountInfo() {
-        if (!::accountInfoText.isInitialized || !::keyValueText.isInitialized) return
+        if (!::keyValueText.isInitialized) return
         val file = activeConfigFile
         if (!file.exists() || file.length() == 0L) {
-            accountInfoText.text = tr(
-                "Konfigurasi belum tersedia. Tekan Update Key untuk membuat akun.",
-                "No configuration yet. Tap Update Key to register an account."
-            )
             keyValueText.text = tr("Konfigurasi belum tersedia", "Configuration unavailable")
             toggleKeyBtn.text = tr("Tampilkan Key", "Show Key")
             return
         }
-        val registered = isConfigValid(file)
         val json = runCatching { JSONObject(file.readText()) }.getOrNull()
         if (json == null) {
-            accountInfoText.text = tr("File konfigurasi ada, tetapi JSON tidak valid.", "Config file exists, but its JSON is invalid.")
             keyValueText.text = tr("JSON tidak dapat dibaca", "Unable to read JSON")
             toggleKeyBtn.text = tr("Tampilkan Key", "Show Key")
             return
-        }
-        val id = json.optString("id", "").orEmpty()
-        val ipv4 = json.optString("ipv4", "").orEmpty()
-        val usingUpdate = file == updatedConfigFile
-        accountInfoText.text = buildString {
-            append(if (usingUpdate) tr("Akun aktif: hasil update", "Active account: updated") else tr("Akun aktif: bawaan", "Active account: default"))
-            if (!registered) append("\n" + tr("Status konfigurasi: belum valid untuk core", "Config status: not validated by core"))
-            if (id.isNotBlank()) append("\nID: $id")
-            if (ipv4.isNotBlank()) append("\nIPv4: $ipv4")
         }
         keyValueText.text = if (keyVisible) {
             json.keys().asSequence().toList().sorted().joinToString("\n\n") { key ->
@@ -820,7 +784,7 @@ class MainActivity : Activity() {
             return
         }
         updatingKey = true
-        log(tr("Mendaftarkan akun WARP baru…", "Registering a new WARP account…"))
+        log(tr("Mendaftarkan akun baru…", "Registering a new account…"))
         executor.execute {
             var error: String? = null
             try {
@@ -841,7 +805,7 @@ class MainActivity : Activity() {
             handler.post {
                 updatingKey = false
                 if (error == null) {
-                    toast(tr("Akun WARP berhasil diperbarui!", "WARP account successfully updated!"))
+                    toast(tr("Akun berhasil diperbarui!", "Account successfully updated!"))
                     log(tr("Update key berhasil.", "Key update successful."))
                     refreshAccountInfo()
                 } else {
@@ -919,25 +883,32 @@ class MainActivity : Activity() {
         val stateStr = prefs.getString("vpn_state", if (vpnRunning) "connected" else "disconnected") ?: "disconnected"
         val detail = prefs.getString("vpn_detail", "") ?: ""
 
-        if (vpnRunning || stateStr == "connected") {
-            statusText.text = tr("Status: Terhubung", "Status: Connected")
-            statusText.setTextColor(connectedGreen)
-            connectButton.text = tr("PUTUSKAN VPN", "DISCONNECT VPN")
-            connectButton.backgroundTintList = ColorStateList.valueOf(disconnectedRed)
-            connectButton.setTextColor(Color.WHITE)
-        } else if (stateStr == "connecting" || stateStr == "reconnecting") {
-            statusText.text = if (stateStr == "connecting") tr("Status: Menghubungkan...", "Status: Connecting...") else tr("Status: Menghubungkan Ulang...", "Status: Reconnecting...")
-            statusText.setTextColor(accentColor)
-            connectButton.text = tr("MEMBATALKAN...", "CANCEL...")
-            connectButton.backgroundTintList = ColorStateList.valueOf(surfaceVariant)
-            connectButton.setTextColor(textMain)
-        } else {
-            statusText.text = tr("Status: Terputus", "Status: Disconnected")
-            statusText.setTextColor(disconnectedRed)
-            connectButton.text = tr("HUBUNGKAN VPN", "CONNECT VPN")
-            connectButton.backgroundTintList = ColorStateList.valueOf(textMain)
-            connectButton.setTextColor(bgColor)
-            resetSpeedMeter()
+        when (stateStr) {
+            "connected" -> {
+                vpnRunning = true
+                statusText.text = tr("Status: Terhubung", "Status: Connected")
+                statusText.setTextColor(connectedGreen)
+                connectButton.text = tr("PUTUSKAN VPN", "DISCONNECT VPN")
+                connectButton.backgroundTintList = ColorStateList.valueOf(disconnectedRed)
+                connectButton.setTextColor(Color.WHITE)
+            }
+            "connecting", "reconnecting" -> {
+                vpnRunning = false
+                statusText.text = if (stateStr == "connecting") tr("Status: Menghubungkan...", "Status: Connecting...") else tr("Status: Menghubungkan Ulang...", "Status: Reconnecting...")
+                statusText.setTextColor(accentColor)
+                connectButton.text = tr("MEMBATALKAN...", "CANCEL...")
+                connectButton.backgroundTintList = ColorStateList.valueOf(surfaceVariant)
+                connectButton.setTextColor(textMain)
+            }
+            else -> {
+                vpnRunning = false
+                statusText.text = tr("Status: Terputus", "Status: Disconnected")
+                statusText.setTextColor(disconnectedRed)
+                connectButton.text = tr("HUBUNGKAN VPN", "CONNECT VPN")
+                connectButton.backgroundTintList = ColorStateList.valueOf(textMain)
+                connectButton.setTextColor(bgColor)
+                resetSpeedMeter()
+            }
         }
 
         if (detail.isNotBlank()) {
