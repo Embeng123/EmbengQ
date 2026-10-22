@@ -14,7 +14,6 @@ import android.util.Log
 import usqueandroid.Usqueandroid
 import usqueandroid.VpnStateCallback
 import java.io.File
-import java.io.FileDescriptor
 import java.util.concurrent.Executors
 import java.util.concurrent.TimeUnit
 import java.util.concurrent.atomic.AtomicBoolean
@@ -78,15 +77,19 @@ class UsqueVpnService : VpnService() {
         lastSplitMode = splitMode
         lastAllowedApps = ArrayList(allowedApps)
 
-        if (!running.get()) publishVpnState(false, "connecting")
-        if (running.get()) return Service.START_STICKY
+        // Mencegah race condition (eksekusi ganda jika diklik cepat)
+        if (!running.compareAndSet(false, true)) {
+            Log.w(TAG, "VPN service already running, skipping start request")
+            return Service.START_STICKY
+        }
+
+        publishVpnState(false, "connecting")
         executor.execute { startNativeTunnel(configPath, sni, endpoint, splitMode, allowedApps) }
         return Service.START_STICKY
     }
 
     private fun startNativeTunnel(configPath: String, sni: String, endpoint: String, splitMode: Boolean, allowedApps: ArrayList<String>) {
         try {
-            running.set(true)
             publishVpnState(false, "connecting")
             Log.i(TAG, "starting vpn service endpoint=$endpoint sni=$sni splitMode=$splitMode allowedApps=${allowedApps.size} config=$configPath")
             Usqueandroid.resetConnectionOptions()
@@ -113,7 +116,6 @@ class UsqueVpnService : VpnService() {
                     }
                 }
             } else {
-                // Critical: do not route this app's own MASQUE/QUIC control connection into itself.
                 runCatching { builder.addDisallowedApplication(packageName) }
                     .onFailure { Log.w(TAG, "addDisallowedApplication failed", it) }
             }
@@ -231,18 +233,11 @@ class UsqueVpnService : VpnService() {
             .onFailure { Log.w(TAG, "tun close failed", it) }
         tun = null
         if (detachedTunFd >= 0) {
-            runCatching { Os.close(fileDescriptorFromInt(detachedTunFd)) }
+            // Penggunaan ParcelFileDescriptor.adoptFd() menggantikan reflection yang bermasalah di Android 9+
+            runCatching { ParcelFileDescriptor.adoptFd(detachedTunFd).close() }
                 .onFailure { Log.w(TAG, "detached fd close failed", it) }
             detachedTunFd = -1
         }
-    }
-
-    private fun fileDescriptorFromInt(fdInt: Int): FileDescriptor {
-        val fd = FileDescriptor()
-        val field = FileDescriptor::class.java.getDeclaredField("descriptor")
-        field.isAccessible = true
-        field.setInt(fd, fdInt)
-        return fd
     }
 
     override fun onDestroy() {
